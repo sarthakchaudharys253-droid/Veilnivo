@@ -45,6 +45,14 @@ The separate local runner retains its application database and stable session se
 - PASS: Public Netlify readiness and health returned HTTP 200 JSON after the release. Exactly the two synthetic QA identities were removed through their own account-bound sessions. Existing accounts were not modified; no database migration was needed.
 - The local screenshot `outputs/Veilnivo-typing-fixed.jpg` records the offline peer without a typing indicator before QA cleanup.
 
+## Public emoji-picker verification - 27 October 2026
+
+- PASS: Frontend source `20c1483eba7f24e5f1a63837b42d981cc554ee26` was published as Netlify deployment `6ae0be0421774fa585bafe7f`. No backend release or database migration was required.
+- PASS: In the real public browser, search found India and thumbs up; medium skin tone selected the intended sequence. The variant menu inserted an exact light/dark mixed-tone handshake, and the recent list showed the chosen emoji.
+- PASS: Several selections preserved an existing draft; a later emoji inserted at the saved cursor in the middle of the text. The picker stayed open for repeated selections.
+- PASS: At a 375 by 812 viewport, the picker fit within the screen (left 12, right 363, top 282.5, bottom 682.5). Category navigation and the native emoji grid worked. The temporary viewport was reset afterward.
+- PASS: The single synthetic QA identity was erased using its own account-bound session. No message was sent to a user or AI provider during the picker checks. Screenshots are `outputs/Veilnivo-full-emoji-picker.jpg` and `outputs/Veilnivo-emoji-mobile.jpg`.
+
 ## Remaining limits
 
 The public smoke check used one browser and an independent Node WebCrypto client. It did not establish two-browser/device interoperability, public attachment delivery, browser lock/sign-in history recovery, or backend restart/cold-start lifecycle behavior. Those remain public acceptance checks; automated and local coverage is recorded separately above and below. GitHub Actions execution has not been verified, although the workflow is included. Paid billing and live AI are inactive. An independent cryptographic/security audit and a reviewed forward-secrecy protocol remain outside the implemented scope; [SECURITY.md](SECURITY.md) describes the current protocol accurately.
