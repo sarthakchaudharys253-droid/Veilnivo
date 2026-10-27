@@ -2,7 +2,8 @@
 
 ## Completed checks
 
-- PASS: 94 automated tests against a fresh PostgreSQL 17.11 database, including SQL integration, exact-user search, local source delivery, client identity isolation, Netlify/Render realtime tickets and typing lifecycle regressions. Zero failures and zero skips.
+- PASS: 101 automated tests against a fresh PostgreSQL 17.11 database, including SQL integration, exact-user search, local source delivery, client identity isolation, Netlify/Render realtime tickets, typing lifecycle regressions and emoji catalog/insertion checks. Zero failures and zero skips.
+- PASS: The bundled Unicode 17 catalog contains all 3,944 fully qualified sequences, including exact mixed-tone variants, with nine categories. Every sequence is reachable from its base entry. Local search aliases, skin-tone selection, Unicode-safe cursor replacement and composer length limits are covered. The official data generator verifies its pinned source checksum; Unicode License V3 and attribution are included. No Apple artwork or font is bundled; rendering uses the device's native emoji font.
 - PASS: Typing starts only after real input, stops after 1.5 seconds idle and on send/blur/chat cleanup, and expires after six seconds if a stop event is lost. Tests cover offline peers, disconnect/reconnect, message arrival, chat/account changes, AI isolation, immediate server stop signals, late authorization after disconnect and multi-tab presence.
 - PASS: Both committed Prisma migrations applied to the isolated PostgreSQL database.
 - PASS: Optimized Next.js static export in explicit same-origin live mode, including TypeScript validation and direct `/login/` output.

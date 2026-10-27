@@ -10,6 +10,7 @@ A dark, two-pane encrypted messenger built with Next.js App Router, TypeScript, 
 - Message requests, explicit acceptance/decline, blocking and unblocking. No public username directory.
 - Exact username and alias search with a result preview before sending a request. Existing connections open a chat; incoming requests open the review screen. Search is authenticated, rate limited, and hides blocked identities.
 - Replies, encrypted reaction events, local message/file-name search, explicit send states and an encrypted, idempotent outbox.
+- Searchable native emoji picker with all 3,944 Unicode 17 emoji, nine categories, skin-tone and mixed-tone variants, and session-only recent emoji. It loads when opened and inserts at the cursor without replacing the rest of a draft. Emoji designs follow the device font.
 - Off / 1 hour / 24 hours / 7 days message timers. New messages use the selected timer; existing messages retain theirs.
 - Files up to 10 MiB, each encrypted with its own random AES-GCM key. Keys, filenames and MIME metadata travel only inside encrypted messages. User-triggered downloads use short-lived object URLs.
 - Identity verification bound to the current public-key fingerprint, with key-change warnings.
