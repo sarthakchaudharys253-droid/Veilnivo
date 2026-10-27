@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
 import {Server as SocketServer,type Socket as ServerSocket} from 'socket.io';
-import {generateIdentityKeyPair} from '../src/lib/crypto';
+import {generateIdentityKeyPair,deriveSharedSecret,encryptPayload} from '../src/lib/crypto';
 import {db,type CachedMessage,type CachedContact} from '../src/lib/db';
 import {BOT_CONTACT_ID} from '../src/lib/compat';
 import type {WireMessage} from '../src/lib/client';
@@ -17,7 +17,7 @@ test('live reconciliation, delayed callbacks, expiry events, and sender TTL stay
  const keys=await Promise.all(Array.from({length:4},()=>generateIdentityKeyPair()));
  const peers=keys.map((key,index)=>({id:crypto.randomUUID(),username:['gone_peer','kept_peer','blocked_peer','pending_peer'][index],public_key:key.publicKeyJwk,ttl_seconds:0,blocked:false}));
  let conversations=[peers[0],peers[1]],blocks=[peers[2]],requests=[{id:crypto.randomUUID(),direction:'outgoing',peer:peers[3]}];
- let account:any,failBlocks=false,ackExpiry:string|null=null,socket:ServerSocket|undefined,heldPeer:string|undefined,releaseHistory:(()=>void)|undefined;
+ let account:any,failBlocks=false,ackExpiry:string|null=null,socket:ServerSocket|undefined,heldPeer:string|undefined,releaseHistory:(()=>void)|undefined,releaseBot:(()=>void)|undefined;
  const history=new Map<string,WireMessage[]>(),uploads=new Map<string,any>(),accountHeaders:string[]=[];
  let lastAck:WireMessage|undefined;
  const http=createServer(async(req,res)=>{
@@ -33,6 +33,8 @@ test('live reconciliation, delayed callbacks, expiry events, and sender TTL stay
    if(url.pathname==='/api/requests'){send({requests});return}
    if(url.pathname==='/api/blocks'){send(failBlocks?{error:'Synthetic block sync unavailable'}:{blocks},failBlocks?503:200);return}
    if(url.pathname==='/api/aliases'){send({aliases:[]});return}
+   if(url.pathname==='/api/bot/history'&&req.method==='POST'){send({message:{id:crypto.randomUUID(),senderId:account.user.id,recipientId:account.user.id,...body,createdAt:new Date().toISOString()}});return}
+   if(url.pathname==='/api/bot/completion'){res.writeHead(200,{'content-type':'text/plain'});res.write('Synthetic assistant response');releaseBot=()=>res.end(' complete');return}
    if(url.pathname.startsWith('/api/messages/')){
     const peer=decodeURIComponent(url.pathname.split('/').at(-1)!);const page={messages:history.get(peer)??[],next_cursor:null};
     if(peer===heldPeer){heldPeer=undefined;releaseHistory=()=>send(page);return}send(page);return;
@@ -60,6 +62,45 @@ test('live reconciliation, delayed callbacks, expiry events, and sender TTL stay
   await state().register('lifecycle_user',password);noError();await until(()=>state().connected&&!!socket,'initial socket');
   assert.equal(socket!.handshake.auth.expected_user_id,account.user.id,'socket auth binds the unlocked identity');
   assert.ok(accountHeaders.length>0&&accountHeaders.every(value=>value===account.user.id),'initial live sync is bound before any protected request');
+
+  await t.test('typing is cleared by offline presence, messages, chat switches and transport loss',async()=>{
+   const peer=peers[1];state().selectChat(peer.id);
+   socket!.emit('typing:receive',{user_id:peer.id,typing:true});await pause();
+   assert.equal(state().typing,false,'an offline contact cannot show typing');
+   socket!.emit('presence:update',{user_id:peer.id,online:true});
+   socket!.emit('typing:receive',{user_id:peer.id,typing:true});await until(()=>state().typing,'online typing');
+   socket!.emit('presence:update',{user_id:peer.id,online:false});await until(()=>!state().typing,'offline clears typing');
+   socket!.emit('typing:receive',{user_id:peer.id,typing:true});await pause();
+   assert.equal(state().typing,false,'a late start cannot restore typing after offline');
+   socket!.emit('presence:update',{user_id:peer.id,online:true});
+   socket!.emit('typing:receive',{user_id:peer.id,typing:true});await until(()=>state().typing,'typing before switching');
+   state().selectChat(peers[0].id);assert.equal(state().typing,false);
+   socket!.emit('typing:receive',{user_id:peer.id,typing:true});await pause();assert.equal(state().typing,false,'another chat cannot show this peer typing');
+   state().selectChat(peer.id);assert.equal(state().typing,false,'switching back does not restore an old hint');
+   socket!.emit('typing:receive',{user_id:peer.id,typing:true});await until(()=>state().typing,'typing before offline browser');
+   useVeilnivo.setState({networkOnline:false});assert.equal(state().typing,false);
+   useVeilnivo.setState({networkOnline:true});assert.equal(state().typing,false);
+   socket!.emit('typing:receive',{user_id:peer.id,typing:true});await until(()=>state().typing,'typing before incoming message');
+   const id=crypto.randomUUID(),payload={id,text:'Synthetic message stops typing',timestamp:Date.now(),senderId:peer.id,type:'text'};
+   const encrypted=await encryptPayload(payload,await deriveSharedSecret(keys[1].privateKey,account.public_key));
+   socket!.emit('message:receive',{id:crypto.randomUUID(),senderId:peer.id,recipientId:account.user.id,clientMessageId:id,...encrypted,createdAt:new Date().toISOString()});
+   await until(()=>!state().typing&&!!state().messages[peer.id]?.some(m=>m.id===id),'message clears typing');
+   socket!.emit('typing:receive',{user_id:peer.id,typing:true});await until(()=>state().typing,'typing before socket loss');
+   const previous=socket;socket!.conn.close();await until(()=>!state().connected,'socket disconnected');assert.equal(state().typing,false);
+   await until(()=>state().connected&&socket!==previous,'socket reconnected');assert.equal(state().typing,false,'reconnect cannot revive old typing');
+  });
+
+  await t.test('assistant thinking stays in its own chat and completion cannot clear peer typing',async()=>{
+   await state().updatePreferences({aiConsent:true});state().selectChat(BOT_CONTACT_ID);
+   const pending=state().send('Synthetic assistant typing isolation');
+   await until(()=>!!releaseBot&&state().typing,'assistant thinking');
+   state().selectChat(peers[1].id);assert.equal(state().typing,false,'assistant thinking must not label a peer as typing');
+   socket!.emit('presence:update',{user_id:peers[1].id,online:true});socket!.emit('typing:receive',{user_id:peers[1].id,typing:true});await until(()=>state().typing,'peer typing while assistant completes');
+   releaseBot!();releaseBot=undefined;await pending;noError();
+   assert.equal(state().typing,true,'assistant finally must not clear another peer typing');
+   socket!.emit('typing:receive',{user_id:peers[1].id,typing:false});await until(()=>!state().typing,'peer stopped');
+   await state().updatePreferences({aiConsent:false});noError();
+  });
 
   await t.test('failed snapshots keep cache and preserve pending, blocked, and assistant peers',async()=>{
    const pending=rowFor(peers[3].id),blocked=rowFor(peers[2].id),bot=rowFor(BOT_CONTACT_ID);
@@ -124,7 +165,7 @@ test('live reconciliation, delayed callbacks, expiry events, and sender TTL stay
    assert.equal(await db.outbox.get(`${account.user.id}:${message.id}`),undefined);
   });
  }finally{
-  releaseHistory?.();await state().logout();io.close();await new Promise<void>(resolve=>http.close(()=>resolve()));db.close();
+  releaseHistory?.();releaseBot?.();await state().logout();io.close();await new Promise<void>(resolve=>http.close(()=>resolve()));db.close();
   if(nativeMode===undefined)delete process.env.NEXT_PUBLIC_API_MODE;else process.env.NEXT_PUBLIC_API_MODE=nativeMode;
   if(nativeUrl===undefined)delete process.env.NEXT_PUBLIC_API_URL;else process.env.NEXT_PUBLIC_API_URL=nativeUrl;
  }

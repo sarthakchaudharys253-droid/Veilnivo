@@ -116,8 +116,10 @@ export async function buildServer(env: NodeJS.ProcessEnv = process.env, database
     const peers=contacts.map(row=>row.userAId===userId?row.userBId:row.userAId);
     const visible=[];for(const peerId of peers)if(!await v2.blocked(userId,peerId))visible.push(peerId);return visible;
   }
-  async function announcePresence(userId:string, isOnline:boolean) {
-    for (const peer of await peerIds(userId)) io.to(room(peer)).emit("presence:update",{user_id:userId,online:isOnline});
+  async function announcePresence(userId:string) {
+    const peers=await peerIds(userId);
+    const isOnline=online(userId);
+    for (const peer of peers) io.to(room(peer)).emit("presence:update",{user_id:userId,online:isOnline});
   }
 
   app.get("/api/health", {config:{rateLimit:false}}, async () => ({ok:true, mode:"production", bot_configured:!!env.BOT_API_KEY && env.BOT_ZERO_RETENTION_CONFIRMED === "true"}));
@@ -312,7 +314,7 @@ export async function buildServer(env: NodeJS.ProcessEnv = process.env, database
     socket.once("disconnect",cancelExpiry);
     if(!socket.connected)return;
     void socket.join(room(userId));
-    void announcePresence(userId,true).catch(() => undefined);
+    void announcePresence(userId).catch(() => undefined);
     let windowStart = Date.now();
     let count = 0;
     async function allowed() {
@@ -336,13 +338,16 @@ export async function buildServer(env: NodeJS.ProcessEnv = process.env, database
     let lastTyping = 0;
     socket.on("typing:send",async (body:unknown) => {
       try {
-        if (Date.now()-lastTyping < 400) return;
-        lastTyping=Date.now();
-        await allowed();
         const data=object(body);
         const recipient=id(data.recipient_id);
         if (typeof data.typing !== "boolean") return;
+        // Never drop a stop signal just because it follows a recent keystroke.
+        if (data.typing && Date.now()-lastTyping < 400) return;
+        if (data.typing) lastTyping=Date.now();
+        await allowed();
         await v2.accepted(userId,recipient);
+        // Authorization may finish after this tab or session disconnected.
+        if (!socket.connected) return;
         io.to(room(recipient)).emit("typing:receive",{user_id:userId,typing:data.typing});
       } catch { /* No logs or persistent typing metadata. */ }
     });
@@ -358,7 +363,7 @@ export async function buildServer(env: NodeJS.ProcessEnv = process.env, database
         io.to(room(message.senderId)).emit("message:receipt",{message_id:message.id,status:"read",at:at.toISOString()});
       } catch { /* Invalid receipts do not affect message contents. */ }
     });
-    socket.on("disconnect",() => {if (!online(userId)) void announcePresence(userId,false).catch(() => undefined);});
+    socket.on("disconnect",() => {if (!online(userId)) void announcePresence(userId).catch(() => undefined);});
   });
   registerLocalSourceDownload(app, env, config);
   if (frontendRoot) await registerFrontend(app, frontendRoot);

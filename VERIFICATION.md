@@ -2,7 +2,8 @@
 
 ## Completed checks
 
-- PASS: 83 automated tests against a fresh PostgreSQL 17.11 database, including SQL integration, exact-user search, local source delivery, client identity isolation, and Netlify/Render realtime tickets. Zero failures and zero skips after final source changes.
+- PASS: 94 automated tests against a fresh PostgreSQL 17.11 database, including SQL integration, exact-user search, local source delivery, client identity isolation, Netlify/Render realtime tickets and typing lifecycle regressions. Zero failures and zero skips.
+- PASS: Typing starts only after real input, stops after 1.5 seconds idle and on send/blur/chat cleanup, and expires after six seconds if a stop event is lost. Tests cover offline peers, disconnect/reconnect, message arrival, chat/account changes, AI isolation, immediate server stop signals, late authorization after disconnect and multi-tab presence.
 - PASS: Both committed Prisma migrations applied to the isolated PostgreSQL database.
 - PASS: Optimized Next.js static export in explicit same-origin live mode, including TypeScript validation and direct `/login/` output.
 - PASS: Final Netlify packaging helper completed with `--webpack` on Windows, producing `/login/`, the exact Render API rewrite and security/cache headers. The Windows Turbopack PostCSS worker failed during its startup handshake; the supported alternative builder completed compilation and TypeScript checks.
@@ -28,7 +29,7 @@ The separate local runner retains its application database and stable session se
 ## Public deployment smoke check - 27 October 2026
 
 - PASS: Render built and ran the Docker release. Deployment `dep-dbg80duc6qcc73ekovfg` for source commit `a7aeec9c2d92291f2055406f346a5e9251413a0a` reached Live at `2026-10-27T10:45:52.752596Z`.
-- PASS: The rebuilt frontend was published to the existing Netlify project as deployment `6ae081632e04ccd398ebb90f`. This uses manual Drop uploads; Render backend updates deploy from Git, while frontend updates require a separate rebuild/upload.
+- PASS: The rebuilt frontend was published to the existing Netlify project as deployment `6ae081632e04ccd398ebb90f`. This uses manual Drop uploads. The Render public-repository source needs a manual deploy of the intended Git commit; frontend updates require a separate rebuild/upload.
 - PASS: Direct Render `/api/ready` returned HTTP 200 JSON `{"ok":true}`. Netlify `/api/ready` and `/api/health` returned production JSON through the same-origin proxy; `/login/` returned HTTP 200 HTML. Live external AI was unconfigured.
 - PASS: Two generated identities registered through the Netlify API proxy. Authentication cookies were Secure, HttpOnly, SameSite=Strict and host-only. Actual browser sign-in and exact username search succeeded, followed by an explicit connection request and recipient acceptance.
 - PASS: A browser on Netlify and an independent Node WebCrypto client exchanged and decrypted encrypted messages in both directions. The independent client authenticated its direct Render WebSocket using a single-use realtime ticket without a Cookie header.
