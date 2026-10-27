@@ -9,13 +9,13 @@ The free beta is deployed at [veilnivo.netlify.app](https://veilnivo.netlify.app
 | Public frontend | https://veilnivo.netlify.app/ |
 | Public backend | https://veilnivo-api-free.onrender.com |
 | Source | https://github.com/sarthakchaudharys253-droid/Veilnivo |
-| Deployed source commit | `a7aeec9c2d92291f2055406f346a5e9251413a0a` |
+| Deployed source commit | `1f59409a1787ae41e5c3b0f742d9caf44b1a3885` |
 | Render workspace | My Workspace, `tea-dbfikelg1s2s73fvboag` |
 | Render Blueprint | `veilnivo-netlify-free` |
 | Render web service | `veilnivo-api-free`, `srv-dbg80dmc6qcc73ekou90` |
-| Verified Live backend deploy | `dep-dbg80duc6qcc73ekovfg` |
+| Verified Live backend deploy | `dep-dbgbfrcipgvc73f3aa00` |
 | Render database | `veilnivo-db-free`, `dpg-dbg7spl9fdbs73d1ms7g-a` |
-| Published Netlify deploy | `6ae081632e04ccd398ebb90f` |
+| Published Netlify deploy | `6ae0b8100fd190814ea378ba` |
 | Database expiry | **26 November 2026, 4:05 PM IST** (`2026-11-26T10:35:18.553914Z`) |
 
 Both Render resources use Free plans in Singapore. The existing database was associated with the Blueprint, preserving that resource. Later documentation/build-helper updates do not change the source commit recorded for the verified release above.

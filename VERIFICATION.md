@@ -36,6 +36,14 @@ The separate local runner retains its application database and stable session se
 - PASS: The independent client recovered the recipient's private key, fetched saved HTTP message history through Netlify, and decrypted both synthetic messages from the PostgreSQL-backed history.
 - PASS: Exactly the two generated QA identities were erased through their own account-bound sessions. Existing user identities were not modified. The final browser screenshot, `outputs/Veilnivo-public-live.jpg`, shows the empty sign-in page with no QA identity.
 
+## Public typing-fix verification - 27 October 2026
+
+- PASS: Render deployed source `1f59409a1787ae41e5c3b0f742d9caf44b1a3885` as `dep-dbgbfrcipgvc73f3aa00`, reaching Live at `2026-10-27T14:42:26.073173Z`. Netlify production deploy `6ae0b8100fd190814ea378ba` published the matching frontend.
+- PASS: A real browser with an unsent draft emitted typing start and then stop after 1,506 ms without additional input. The independent recipient observed both events through the public backend.
+- PASS: The browser displayed active peer typing. When the independent peer deliberately omitted its stop event, the indicator expired. When the typing peer disconnected, the header changed to Offline and the typing indicator cleared.
+- PASS: Public Netlify readiness and health returned HTTP 200 JSON after the release. Exactly the two synthetic QA identities were removed through their own account-bound sessions. Existing accounts were not modified; no database migration was needed.
+- The local screenshot `outputs/Veilnivo-typing-fixed.jpg` records the offline peer without a typing indicator before QA cleanup.
+
 ## Remaining limits
 
 The public smoke check used one browser and an independent Node WebCrypto client. It did not establish two-browser/device interoperability, public attachment delivery, browser lock/sign-in history recovery, or backend restart/cold-start lifecycle behavior. Those remain public acceptance checks; automated and local coverage is recorded separately above and below. GitHub Actions execution has not been verified, although the workflow is included. Paid billing and live AI are inactive. An independent cryptographic/security audit and a reviewed forward-secrecy protocol remain outside the implemented scope; [SECURITY.md](SECURITY.md) describes the current protocol accurately.
