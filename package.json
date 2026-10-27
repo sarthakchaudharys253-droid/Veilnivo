@@ -1,0 +1,56 @@
+{
+  "name": "veilnivo",
+  "version": "2.0.0",
+  "private": true,
+  "packageManager": "pnpm@11.25.0",
+  "scripts": {
+    "dev": "next dev --hostname 127.0.0.1",
+    "build": "next build",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test tests/*.test.ts server/*.test.ts",
+    "server": "tsx server/index.ts",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "postinstall": "prisma generate",
+    "start": "node --env-file-if-exists=.env --import tsx server/index.ts",
+    "start:deploy": "node --env-file-if-exists=.env scripts/start-production.mjs",
+    "db:deploy": "prisma migrate deploy",
+    "local": "node scripts/local.mjs start",
+    "local:stop": "node scripts/local.mjs stop",
+    "local:status": "node scripts/local.mjs status"
+  },
+  "dependencies": {
+    "next": "^16.0.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "zustand": "^5.0.8",
+    "dexie": "^4.2.0",
+    "socket.io-client": "^4.8.1",
+    "socket.io": "^4.8.1",
+    "fastify": "^5.6.1",
+    "@fastify/cookie": "^11.0.2",
+    "@fastify/cors": "^11.1.0",
+    "@fastify/jwt": "^10.0.0",
+    "@fastify/rate-limit": "^10.3.0",
+    "@prisma/client": "^6.17.1",
+    "argon2": "^0.44.0",
+    "lucide-react": "^0.468.0",
+    "qrcode": "^1.5.4",
+    "@fastify/static": "^10.1.7"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "tsx": "^4.20.6",
+    "prisma": "^6.17.1",
+    "@types/node": "^22.18.8",
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.2",
+    "tailwindcss": "^4.1.14",
+    "@tailwindcss/postcss": "^4.1.14",
+    "@types/qrcode": "^1.5.5",
+    "fake-indexeddb": "^6.2.4"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}

@@ -1,0 +1,26 @@
+[build]
+  command = "node scripts/build-netlify.mjs"
+  publish = "out"
+
+[build.environment]
+  NODE_VERSION = "22"
+  PNPM_VERSION = "11.25.0"
+  NEXT_TELEMETRY_DISABLED = "1"
+  NETLIFY_NEXT_PLUGIN_SKIP = "true"
+
+# Set VEILNIVO_BACKEND_ORIGIN in Netlify's build environment to the exact
+# HTTPS origin returned by Render. The build fails if it is missing or invalid.
+# The build writes the API rewrite into out/_redirects and embeds only the
+# public realtime origin. Database credentials and JWT secrets stay in Render.
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "no-referrer"
+    X-Frame-Options = "DENY"
+
+[[headers]]
+  for = "/api/*"
+  [headers.values]
+    Cache-Control = "no-store"

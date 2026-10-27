@@ -1,0 +1,150 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                  String    @id @default(uuid())
+  username            String    @unique
+  authHashDigest      String
+  authSalt            String
+  wrapSalt            String
+  wrapIv              String
+  publicKeyJwk        String
+  encryptedPrivateKey String
+  createdAt           DateTime  @default(now())
+  sentMessages        Message[] @relation("SentMessages")
+  receivedMessages    Message[] @relation("ReceivedMessages")
+  sessions            Session[]
+  contactsAsA         Contact[] @relation("ContactA")
+  contactsAsB         Contact[] @relation("ContactB")
+  requestedContacts   Contact[] @relation("ContactRequester")
+  blockedUsers        Block[] @relation("Blocker")
+  blockedBy           Block[] @relation("Blocked")
+  invitations         Invitation[] @relation("InvitationCreator")
+  acceptedInvitations Invitation[] @relation("InvitationAcceptor")
+  ownedAttachments    Attachment[] @relation("AttachmentOwner")
+  receivedAttachments Attachment[] @relation("AttachmentRecipient")
+  aliases             Alias[]
+  sentNonces          SendNonce[] @relation("NonceSender")
+  receivedNonces      SendNonce[] @relation("NonceRecipient")
+}
+
+model Session {
+  id        String   @id @default(uuid())
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model Contact {
+  id            String @id @default(uuid())
+  userAId       String
+  userBId       String
+  requestedById String
+  status        String @default("pending")
+  ttlSeconds    Int @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  userA         User @relation("ContactA", fields:[userAId],references:[id],onDelete:Cascade)
+  userB         User @relation("ContactB", fields:[userBId],references:[id],onDelete:Cascade)
+  requestedBy   User @relation("ContactRequester", fields:[requestedById],references:[id],onDelete:Cascade)
+  @@unique([userAId,userBId])
+  @@index([userBId,status])
+  @@index([userAId,status])
+}
+
+model Block {
+  id        String @id @default(uuid())
+  blockerId String
+  blockedId String
+  createdAt DateTime @default(now())
+  blocker User @relation("Blocker",fields:[blockerId],references:[id],onDelete:Cascade)
+  blocked User @relation("Blocked",fields:[blockedId],references:[id],onDelete:Cascade)
+  @@unique([blockerId,blockedId])
+  @@index([blockedId])
+}
+
+model Invitation {
+  id         String @id @default(uuid())
+  creatorId  String
+  tokenHash  String @unique
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  usedAt     DateTime?
+  usedById   String?
+  revokedAt  DateTime?
+  creator User @relation("InvitationCreator",fields:[creatorId],references:[id],onDelete:Cascade)
+  usedBy User? @relation("InvitationAcceptor",fields:[usedById],references:[id],onDelete:SetNull)
+  @@index([creatorId,expiresAt])
+}
+
+model Alias {
+  id        String @id @default(uuid())
+  userId    String
+  username  String @unique
+  createdAt DateTime @default(now())
+  user User @relation(fields:[userId],references:[id],onDelete:Cascade)
+  @@index([userId])
+}
+
+model Attachment {
+  id          String @id @default(uuid())
+  ownerId     String
+  recipientId String
+  ciphertext  String
+  iv          String
+  size        Int
+  messageId   String?
+  orphanExpiresAt DateTime?
+  message Message? @relation(fields:[messageId],references:[id],onDelete:Cascade)
+  createdAt   DateTime @default(now())
+  expiresAt   DateTime?
+  owner User @relation("AttachmentOwner",fields:[ownerId],references:[id],onDelete:Cascade)
+  recipient User @relation("AttachmentRecipient",fields:[recipientId],references:[id],onDelete:Cascade)
+  @@index([ownerId,recipientId])
+  @@index([expiresAt])
+}
+
+model Message {
+  id              String    @id @default(uuid())
+  senderId        String
+  recipientId     String
+  clientMessageId String?
+  ciphertext      String
+  iv              String
+  createdAt       DateTime  @default(now())
+  expiresAt       DateTime?
+  deliveredAt     DateTime?
+  readAt          DateTime?
+  sender          User @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  recipient       User @relation("ReceivedMessages", fields: [recipientId], references: [id], onDelete: Cascade)
+  nonce           SendNonce?
+  attachments     Attachment[]
+  @@unique([senderId,clientMessageId])
+  @@index([senderId, recipientId])
+  @@index([recipientId, createdAt])
+  @@index([expiresAt])
+}
+
+// Ciphertext is deleted at expiration. A nonce has no message content and only
+// prevents replay of the same expired operation. Account erasure cascades it.
+model SendNonce {
+  id              String @id @default(uuid())
+  senderId        String
+  recipientId     String
+  clientMessageId String
+  messageId       String? @unique
+  sender User @relation("NonceSender",fields:[senderId],references:[id],onDelete:Cascade)
+  recipient User @relation("NonceRecipient",fields:[recipientId],references:[id],onDelete:Cascade)
+  message Message? @relation(fields:[messageId],references:[id],onDelete:SetNull)
+  @@unique([senderId,clientMessageId])
+  @@index([recipientId])
+}

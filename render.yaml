@@ -1,0 +1,43 @@
+# Free beta configuration for https://veilnivo.netlify.app.
+# This is also the default render.yaml; the paid opt-in is deploy/render-paid.yaml.
+# Free web services sleep after 15 minutes without inbound traffic.
+# Free PostgreSQL expires after 30 days and has no managed backups.
+services:
+  - type: web
+    name: veilnivo-api-free
+    runtime: docker
+    region: singapore
+    plan: free
+    numInstances: 1
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/ready
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: HOST
+        value: 0.0.0.0
+      - key: PORT
+        value: "10000"
+      - key: SERVE_FRONTEND
+        value: "false"
+      - key: CLIENT_ORIGIN
+        value: https://veilnivo.netlify.app
+      - key: REALTIME_TICKETS
+        value: "true"
+      - key: JWT_SECRET
+        generateValue: true
+      - key: DATABASE_URL
+        fromDatabase:
+          name: veilnivo-db-free
+          property: connectionString
+      - key: BOT_ZERO_RETENTION_CONFIRMED
+        value: "false"
+
+databases:
+  - name: veilnivo-db-free
+    region: singapore
+    plan: free
+    postgresMajorVersion: "17"
+    # The free plan has fixed 1 GB storage; do not enable storage autoscaling.
+    ipAllowList: []

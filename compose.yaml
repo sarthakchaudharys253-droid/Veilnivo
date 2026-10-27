@@ -1,0 +1,62 @@
+services:
+  db:
+    image: postgres:17-bookworm
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: veilnivo
+      POSTGRES_USER: veilnivo
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env.compose}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U veilnivo -d veilnivo"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    networks: [backend]
+  app:
+    build: .
+    restart: unless-stopped
+    init: true
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      HOST: 0.0.0.0
+      PORT: "3001"
+      SERVE_FRONTEND: "true"
+      CLIENT_ORIGIN: ${APP_ORIGIN:?Set APP_ORIGIN in .env.compose}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env.compose}
+      DATABASE_URL: postgresql://veilnivo:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env.compose}@db:5432/veilnivo?schema=public
+      TRUST_PROXY: 172.30.25.10/32
+      BOT_ZERO_RETENTION_CONFIRMED: "false"
+    depends_on:
+      db: { condition: service_healthy }
+    ports:
+      - "127.0.0.1:${LOCAL_PORT:-3001}:3001"
+    networks: [backend, edge]
+  caddy:
+    image: caddy:2-alpine
+    profiles: [https]
+    restart: unless-stopped
+    environment:
+      APP_HOST: ${APP_HOST:-localhost}
+    ports: ["80:80", "443:443", "443:443/udp"]
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      app: { condition: service_healthy }
+    networks:
+      edge:
+        ipv4_address: 172.30.25.10
+volumes:
+  postgres-data:
+  caddy-data:
+  caddy-config:
+networks:
+  backend:
+    internal: true
+  edge:
+    ipam:
+      config:
+        - subnet: 172.30.25.0/24

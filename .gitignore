@@ -1,0 +1,14 @@
+node_modules/
+.next/
+out/
+.env
+.env.local
+*.tsbuildinfo
+.sites-runtime/
+*.tar.gz
+.pnpm-store/
+.env.*
+!.env.example
+!.env.compose.example
+coverage/
+.local/

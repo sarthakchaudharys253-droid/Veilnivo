@@ -1,0 +1,42 @@
+# Review the compute plans in Render before applying this Blueprint.
+# One instance: realtime coordination and limiting currently live in process memory.
+services:
+  - type: web
+    name: veilnivo
+    runtime: docker
+    region: singapore
+    plan: 0.5c-512mb
+    numInstances: 1
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/ready
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: HOST
+        value: 0.0.0.0
+      - key: PORT
+        value: "10000"
+      - key: SERVE_FRONTEND
+        value: "true"
+      - key: FRONTEND_DIR
+        value: out
+      - key: JWT_SECRET
+        generateValue: true
+      - key: DATABASE_URL
+        fromDatabase:
+          name: veilnivo-db
+          property: connectionString
+      - key: BOT_ZERO_RETENTION_CONFIRMED
+        value: "false"
+# RENDER_EXTERNAL_URL supplies the default frontend origin. Set CLIENT_ORIGIN
+# to the exact HTTPS custom origin when adding a custom domain.
+databases:
+  - name: veilnivo-db
+    databaseName: veilnivo
+    user: veilnivo
+    region: singapore
+    plan: 0.1c-256mb
+    postgresMajorVersion: "17"
+    diskSizeGB: 1
+    ipAllowList: []

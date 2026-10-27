@@ -1,0 +1,7 @@
+{$APP_HOST} {
+    # WebSocket upgrades pass through automatically; flush SSE as it arrives.
+    reverse_proxy app:3001 {
+        flush_interval -1
+    }
+    # No access log: invitation tokens and authentication traffic remain unlogged.
+}

@@ -1,0 +1,59 @@
+name: Verify Veilnivo
+"on": [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17-bookworm
+        env:
+          POSTGRES_USER: veilnivo
+          POSTGRES_PASSWORD: isolated-ci-password
+          POSTGRES_DB: veilnivo_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U veilnivo -d veilnivo_test"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      DATABASE_URL: postgresql://veilnivo:isolated-ci-password@localhost:5432/veilnivo_test?schema=public
+      TEST_DATABASE_URL: postgresql://veilnivo:isolated-ci-password@localhost:5432/veilnivo_test?schema=public
+      NEXT_PUBLIC_API_MODE: same-origin
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: "22"
+      - uses: pnpm/action-setup@v6.1.0
+        with:
+          version: "11.25.0"
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm db:deploy
+      - run: pnpm typecheck
+      - run: pnpm test
+      - name: Build production image
+        run: docker build --tag veilnivo-ci .
+      - name: Check combined application and database readiness
+        run: |
+          docker run --detach --name veilnivo-ci --network host \
+            -e DATABASE_URL \
+            -e JWT_SECRET=isolated-ci-session-secret-over-32-characters \
+            -e APP_ORIGIN=https://app.example.test \
+            veilnivo-ci
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:3001/api/ready; then break; fi
+            sleep 2
+          done
+          curl --fail http://127.0.0.1:3001/api/ready
+          curl --fail http://127.0.0.1:3001/login/ --output /dev/null
+      - name: Container diagnostics
+        if: failure()
+        run: docker logs veilnivo-ci || true
+      - name: Stop test application
+        if: always()
+        run: docker rm --force veilnivo-ci || true

@@ -1,0 +1,25 @@
+ALTER TABLE "Message" ADD COLUMN "clientMessageId" TEXT;
+ALTER TABLE "Message" ADD COLUMN "expiresAt" TIMESTAMP(3);
+CREATE UNIQUE INDEX "Message_senderId_clientMessageId_key" ON "Message"("senderId","clientMessageId");
+CREATE INDEX "Message_expiresAt_idx" ON "Message"("expiresAt");
+CREATE TABLE "Contact"("id" TEXT PRIMARY KEY,"userAId" TEXT NOT NULL REFERENCES "User"("id") ON DELETE CASCADE,"userBId" TEXT NOT NULL REFERENCES "User"("id") ON DELETE CASCADE,"requestedById" TEXT NOT NULL REFERENCES "User"("id") ON DELETE CASCADE,"status" TEXT NOT NULL DEFAULT 'pending',"ttlSeconds" INTEGER NOT NULL DEFAULT 0,"createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,"updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE UNIQUE INDEX "Contact_userAId_userBId_key" ON "Contact"("userAId","userBId");
+CREATE INDEX "Contact_userAId_status_idx" ON "Contact"("userAId","status");
+CREATE INDEX "Contact_userBId_status_idx" ON "Contact"("userBId","status");
+INSERT INTO "Contact"("id","userAId","userBId","requestedById","status") SELECT '00000000-0000-4000-8000-' || substr(md5(least("senderId","recipientId") || greatest("senderId","recipientId")),1,12),least("senderId","recipientId"),greatest("senderId","recipientId"),least("senderId","recipientId"),'accepted' FROM "Message" WHERE "senderId" <> "recipientId" GROUP BY least("senderId","recipientId"),greatest("senderId","recipientId");
+CREATE TABLE "Block"("id" TEXT PRIMARY KEY,"blockerId" TEXT NOT NULL REFERENCES "User"("id") ON DELETE CASCADE,"blockedId" TEXT NOT NULL REFERENCES "User"("id") ON DELETE CASCADE,"createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE UNIQUE INDEX "Block_blockerId_blockedId_key" ON "Block"("blockerId","blockedId");
+CREATE INDEX "Block_blockedId_idx" ON "Block"("blockedId");
+CREATE TABLE "Invitation"("id" TEXT PRIMARY KEY,"creatorId" TEXT NOT NULL REFERENCES "User"("id") ON DELETE CASCADE,"tokenHash" TEXT NOT NULL UNIQUE,"expiresAt" TIMESTAMP(3) NOT NULL,"createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,"usedAt" TIMESTAMP(3),"usedById" TEXT REFERENCES "User"("id") ON DELETE SET NULL,"revokedAt" TIMESTAMP(3));
+CREATE INDEX "Invitation_creatorId_expiresAt_idx" ON "Invitation"("creatorId","expiresAt");
+CREATE TABLE "Alias"("id" TEXT PRIMARY KEY,"userId" TEXT NOT NULL REFERENCES "User"("id") ON DELETE CASCADE,"username" TEXT NOT NULL UNIQUE,"createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE INDEX "Alias_userId_idx" ON "Alias"("userId");
+CREATE TABLE "Attachment"("id" TEXT PRIMARY KEY,"ownerId" TEXT NOT NULL REFERENCES "User"("id") ON DELETE CASCADE,"recipientId" TEXT NOT NULL REFERENCES "User"("id") ON DELETE CASCADE,"ciphertext" TEXT NOT NULL,"iv" TEXT NOT NULL,"size" INTEGER NOT NULL,"createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,"expiresAt" TIMESTAMP(3));
+CREATE INDEX "Attachment_ownerId_recipientId_idx" ON "Attachment"("ownerId","recipientId");
+CREATE INDEX "Attachment_expiresAt_idx" ON "Attachment"("expiresAt");
+CREATE TABLE "SendNonce"("id" TEXT PRIMARY KEY,"senderId" TEXT NOT NULL REFERENCES "User"("id") ON DELETE CASCADE,"recipientId" TEXT NOT NULL REFERENCES "User"("id") ON DELETE CASCADE,"clientMessageId" TEXT NOT NULL,"messageId" TEXT UNIQUE REFERENCES "Message"("id") ON DELETE SET NULL);
+CREATE UNIQUE INDEX "SendNonce_senderId_clientMessageId_key" ON "SendNonce"("senderId","clientMessageId");
+CREATE INDEX "SendNonce_recipientId_idx" ON "SendNonce"("recipientId");
+
+ALTER TABLE "Attachment" ADD COLUMN "messageId" TEXT REFERENCES "Message"("id") ON DELETE CASCADE;
+ALTER TABLE "Attachment" ADD COLUMN "orphanExpiresAt" TIMESTAMP(3);

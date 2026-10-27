@@ -1,0 +1,17 @@
+import { CLIENT_DATABASE_NAME } from './compat';
+import Dexie, { type Table } from 'dexie';
+export interface CachedAccount { id:string;username:string;authDigest:string;auth_salt:string;wrap_salt:string;wrap_iv:string;public_key:JsonWebKey;encrypted_private_key:string }
+export interface CachedMessage {cacheId:string;id:string;ownerId:string;peerId:string;ciphertext:string;iv:string;createdAt:number;expiresAt?:number;status?:string;serverId?:string;attachmentId?:string;paused?:boolean}
+export interface CachedContact {cacheId:string;ownerId:string;peerId:string;username:string;publicKeyJwk:JsonWebKey;ttlSeconds?:number;blocked?:boolean;requestStatus?:'accepted'|'outgoing'}
+export interface CachedRequest {id:string;fromId:string;toId:string;fromUsername:string;toUsername:string;fromKey:JsonWebKey;toKey:JsonWebKey;status:'pending'|'accepted'|'declined';createdAt:number}
+export interface CachedInvite {id:string;tokenHash:string;ownerId:string;username:string;publicKeyJwk:JsonWebKey;expiresAt:number;usedAt?:number;revokedAt?:number}
+export interface CachedAttachment {id:string;ownerId:string;recipientId:string;ciphertext:string;iv:string;size:number;expiresAt?:number}
+export interface CachedSettings {ownerId:string;ciphertext:string;iv:string}
+export interface CachedAlias {username:string;ownerId:string}
+class VeilnivoDatabase extends Dexie {
+ accounts!:Table<CachedAccount,string>;messages!:Table<CachedMessage,string>;contacts!:Table<CachedContact,string>;outbox!:Table<CachedMessage,string>;requests!:Table<CachedRequest,string>;invites!:Table<CachedInvite,string>;attachments!:Table<CachedAttachment,string>;settings!:Table<CachedSettings,string>;aliases!:Table<CachedAlias,string>;
+ constructor(){super(CLIENT_DATABASE_NAME);this.version(1).stores({accounts:'id,&username',messages:'cacheId,ownerId,[ownerId+peerId],createdAt',contacts:'cacheId,ownerId,[ownerId+peerId]'});this.version(2).stores({accounts:'id,&username',messages:'cacheId,ownerId,[ownerId+peerId],createdAt,expiresAt',contacts:'cacheId,ownerId,[ownerId+peerId]',outbox:'cacheId,ownerId,[ownerId+peerId],createdAt,expiresAt',requests:'id,fromId,toId,status',invites:'id,&tokenHash,ownerId,expiresAt',attachments:'id,ownerId,recipientId,expiresAt',settings:'ownerId',aliases:'username,ownerId'});}
+}
+export const db=new VeilnivoDatabase();
+export async function eraseLocalDatabase(){db.close();const names=new Set([CLIENT_DATABASE_NAME]);let inventoryFailure:unknown;if(typeof indexedDB.databases==='function'){try{for(const item of await indexedDB.databases())if(item.name)names.add(item.name)}catch(e){inventoryFailure=e}}
+ const results=await Promise.allSettled([...names].map(name=>new Promise<void>((resolve,reject)=>{const req=indexedDB.deleteDatabase(name);req.onsuccess=()=>resolve();req.onerror=()=>reject(req.error??new Error('Browser storage deletion failed.'));req.onblocked=()=>reject(new Error('Another Veilnivo tab is blocking erasure. Close other tabs and clear site storage.'));})));const failure=results.find((r):r is PromiseRejectedResult=>r.status==='rejected');if(failure)throw failure.reason;if(inventoryFailure)throw new Error('Veilnivo storage was erased, but other browser databases could not be enumerated. Clear site storage to finish.');}

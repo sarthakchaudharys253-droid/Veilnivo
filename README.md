@@ -1,2 +1,82 @@
-# Veilnivo
-Chat non-stop
+# Veilnivo 2
+
+Chat non-stop.
+
+A dark, two-pane encrypted messenger built with Next.js App Router, TypeScript, Tailwind, Zustand, Dexie, Fastify, Socket.io, Prisma and PostgreSQL.
+
+## What's included
+
+- Single-use expiring invite links and locally generated QR codes; revocation and invite-led username/password onboarding.
+- Message requests, explicit acceptance/decline, blocking and unblocking. No public username directory.
+- Exact username and alias search with a result preview before sending a request. Existing connections open a chat; incoming requests open the review screen. Search is authenticated, rate limited, and hides blocked identities.
+- Replies, encrypted reaction events, local message/file-name search, explicit send states and an encrypted, idempotent outbox.
+- Off / 1 hour / 24 hours / 7 days message timers. New messages use the selected timer; existing messages retain theirs.
+- Files up to 10 MiB, each encrypted with its own random AES-GCM key. Keys, filenames and MIME metadata travel only inside encrypted messages. User-triggered downloads use short-lived object URLs.
+- Identity verification bound to the current public-key fingerprint, with key-change warnings.
+- Optional Veil AI with first-use consent. Peer conversation history is not included automatically.
+- Readable comfortable/compact layouts, mint/blue/violet accents, optional inactivity lock, and up to three additional aliases pointing to the same identity.
+- Separate local/server erasure states. One header erase control; Ctrl+Shift+Backspace opens the same confirmation.
+- Free/Plus pricing experiment and explicit inactive billing. Feedback can be exported locally, with no automatic submission or analytics.
+
+## Run the local preview
+
+Use Node.js 22+ and pnpm 11.25, then:
+
+```sh
+pnpm install
+pnpm dev
+```
+
+With neither `NEXT_PUBLIC_API_MODE` nor `NEXT_PUBLIC_API_URL` configured, the app opens a labeled sample workspace. Contacts and requests in that workspace are examples. Veil AI is a deterministic local helper, not a hosted model. Create your own identity in Settings to test accounts, aliases, invite acceptance and encrypted history. Local identities created in the same browser origin can connect through requests or invitations. Cross-device invitations and remote messages require the backend.
+
+For a clean local account workspace, open `/login/` and create an identity. Real account workspaces start empty except the optional assistant. Lock and sign in again to restore encrypted history. Prior v1 local identities are migrated on successful login.
+
+## Production backend
+
+For the existing Netlify frontend and a free Render beta backend, use [NETLIFY-RENDER.md](NETLIFY-RENDER.md). The default `render.yaml` and its `render-free.yaml` copy both use Free plans for the API and PostgreSQL. The free app sleeps when idle and the database expires after 30 days; publishing and end-to-end verification are separate steps. The earlier paid configuration is preserved as `deploy/render-paid.yaml` for a separate, explicit paid opt-in.
+
+Follow [DEPLOYMENT.md](DEPLOYMENT.md) for the Render Docker + PostgreSQL setup and optional container hosts. Netlify's checked-in build uses `VEILNIVO_BACKEND_ORIGIN` to prepare same-origin HTTP API routing and direct authenticated realtime connections to Render. The combined Docker alternative can serve the frontend through Fastify alongside the API and Socket.io. Runtime `DATABASE_URL`, a random `JWT_SECRET`, and the exact HTTPS `APP_ORIGIN` or `CLIENT_ORIGIN` belong in the provider's secret/environment settings. `pnpm start:deploy` applies the included Prisma migrations before starting the server. Run one application replica.
+
+For separate local frontend/API processes, see [server/README.md](server/README.md). Direct browser HTTP API connections still require suitable same-site HTTPS origins for strict HttpOnly cookies. The Netlify integration instead proxies HTTP through the frontend origin and uses short-lived realtime tickets for the separate WebSocket origin. PostgreSQL migrations include v2 contact consent, hashed invitations, message idempotency tombstones, expiry policy, aliases and encrypted attachment storage.
+
+The existing hosted Sites preview remains a static demonstration with browser-local data until an actual Node deployment is available. Browser-local identities/history are not uploaded automatically. Cloudflare Workers and Vercel functions need separate backend adapters; Supabase can supply external PostgreSQL without replacing this backend. No hosting resources or paid services are implied by the deployment files.
+
+AI remains disabled server-side until provider credentials/model and an operator-confirmed zero-retention agreement are configured. The provider necessarily reads live prompts. No claim of model-provider end-to-end encryption is made.
+
+## Security and honest limits
+
+Read [SECURITY.md](SECURITY.md). This version retains native WebCrypto PBKDF2-SHA256 (600,000 iterations, independent salts), ECDH P-256 and AES-256-GCM with fresh random IVs. Production auth proofs are Argon2id-hashed. Messages, replies, reactions, file keys and file metadata are encrypted before storage/transmission. Browser settings/trust records are encrypted locally.
+
+The ratcheting-protocol suggestion is documented as a concrete migration proposal, not implemented or independently audited. Static ECDH conversation keys do not provide forward secrecy. The official current Signal library is not a drop-in WebCrypto browser library. A specialist must select/review the implementation and historical-recovery tradeoff before a security-focused public launch. No homemade replacement is represented as a reviewed protocol.
+
+This is not a zero-metadata service: the server sees account IDs, routing, timing, ciphertext sizes and required delivery metadata. JavaScript drops key references but cannot promise physical RAM overwriting. Local preview account verification uses SHA-256 over an already stretched authentication proof; production uses Argon2id.
+
+## Expiry and erasure
+
+Timers run from message sending time and apply to new messages. Online clients remove expired local messages/files; server reads filter expired rows immediately and a periodic cleanup removes database copies. Cleanup occurs when clients/server run. Application expiry cannot retract screenshots, exported files or downloaded copies.
+
+Each uploaded file expires after 15 minutes if it is never sent. Successful sends atomically bind attachments to messages and inherit the message expiry. Message deletion cascades to the encrypted file. Retry tombstones prevent replaying an expired message back into history.
+
+Erase drops keys/sockets, clears localStorage/sessionStorage and origin IndexedDB databases, and in live mode requests atomic account/message/file deletion. Local and server states are displayed separately. Offline server deletion is unconfirmed; while the page remains open, the HttpOnly-cookie request retries on reconnection with an expected-user guard. Reloading or changing identities cancels that memory-only retry. Network latency prevents a universal under-500ms guarantee. Infrastructure backups and recipient copies are outside the application deletion boundary.
+
+## Pricing and pilot
+
+The $4/month Plus card is a pricing hypothesis, not an active subscription. No checkout or payment collection is implemented. Core messaging, encryption, blocking, timers and erase controls are not paywalled. Preview aliases/colors are available for evaluation; larger attachments are not advertised as working.
+
+Use [PILOT.md](PILOT.md) for a 20-user research workflow. The app's feedback form keeps answers in memory and exports a user-controlled JSON file; it sends nothing automatically. No participants have been contacted and no market demand is claimed.
+
+## Verification
+
+```sh
+pnpm typecheck
+pnpm test
+pnpm build
+```
+
+The Windows build uses Next's worker-thread option to avoid sandbox child-process filesystem restrictions. Output is `out/`. Automated tests cover cryptography, file encryption/tampering, payload validation, contact consent, local history/key recovery, legacy-account migration, encrypted outbox retry, replies/reactions, attachments, timers, trust and erasure. PostgreSQL integration tests are included but explicitly skipped without an isolated `TEST_DATABASE_URL`; do not point tests at production.
+
+## Connected local backend
+
+Use [LOCAL-RUN.md](LOCAL-RUN.md) to start the combined frontend and real PostgreSQL backend on this computer. `pnpm local` starts it; `pnpm local:stop` stops it while retaining local accounts and history.
+
+The source ZIP must be fully extracted and its prerequisites installed before starting it. On the configured local installation, open `http://127.0.0.1:3001` while the runner is active. An optional sanitized source download is available at `/downloads/Veilnivo-source.zip`; the runner prints that link when it finds the archive. The file download route is limited to loopback use and is disabled for public production hosting.
