@@ -1,6 +1,26 @@
 # Netlify frontend and free Render backend
 
-This guide describes a free beta configuration for the existing frontend at `https://veilnivo.netlify.app`. Configuration files do not prove a deployment is live. Verify the actual Render service, its readiness endpoint, and the Netlify frontend after applying changes.
+The free beta is deployed at [veilnivo.netlify.app](https://veilnivo.netlify.app/) with its [Render backend](https://veilnivo-api-free.onrender.com/api/ready) and PostgreSQL connected. Public checks on 27 October 2026 passed sign-in, exact username search, connection requests, bidirectional encrypted messaging between a browser and an independent Node WebCrypto client, and decryption of saved PostgreSQL-backed history. The two generated QA identities were erased using their own account-bound sessions; existing user identities were not modified. See [VERIFICATION.md](VERIFICATION.md) for the precise scope.
+
+## Current deployment record
+
+| Item | Verified value |
+| --- | --- |
+| Public frontend | https://veilnivo.netlify.app/ |
+| Public backend | https://veilnivo-api-free.onrender.com |
+| Source | https://github.com/sarthakchaudharys253-droid/Veilnivo |
+| Deployed source commit | `a7aeec9c2d92291f2055406f346a5e9251413a0a` |
+| Render workspace | My Workspace, `tea-dbfikelg1s2s73fvboag` |
+| Render Blueprint | `veilnivo-netlify-free` |
+| Render web service | `veilnivo-api-free`, `srv-dbg80dmc6qcc73ekou90` |
+| Verified Live backend deploy | `dep-dbg80duc6qcc73ekovfg` |
+| Render database | `veilnivo-db-free`, `dpg-dbg7spl9fdbs73d1ms7g-a` |
+| Published Netlify deploy | `6ae081632e04ccd398ebb90f` |
+| Database expiry | **26 November 2026, 4:05 PM IST** (`2026-11-26T10:35:18.553914Z`) |
+
+Both Render resources use Free plans in Singapore. The existing database was associated with the Blueprint, preserving that resource. Later documentation/build-helper updates do not change the source commit recorded for the verified release above.
+
+Render automatically deploys backend changes from the repository's `main` branch. The existing Netlify project currently uses manual Drop uploads and is not linked to Git. Frontend changes require a local rebuild and upload to the same Netlify project unless Git-based Netlify deployment is configured separately. Reuse these resources; do not create a second project or database for routine updates.
 
 ## Render resources
 
@@ -23,15 +43,17 @@ The existing `SameSite=Strict` session cookie cannot authenticate direct cross-s
 
 The free configuration enables `REALTIME_TICKETS=true` on Render. Netlify must forward HTTP API requests through a forced HTTP 200 rewrite, preserving `/api` in the target. The browser sends its strict HttpOnly session cookie to Netlify's same-origin API route. For realtime messaging, it requests a short-lived, single-use ticket from `POST /api/realtime/ticket`, then connects directly to Render's WebSocket endpoint with that ticket. The ticket lasts at most 30 seconds and is not a persistent browser session token. This avoids depending on third-party cookies or a WebSocket proxy through Netlify.
 
-The exact backend hostname is assigned by Render. After that address is known, set this one public Netlify build variable:
+For the current deployment, set this one public build variable in the terminal for manual builds, or in Netlify's build environment if Git-based builds are configured later:
 
 ```text
-VEILNIVO_BACKEND_ORIGIN=https://<actual-render-host>
+VEILNIVO_BACKEND_ORIGIN=https://veilnivo-api-free.onrender.com
 ```
 
-`<actual-render-host>` is a placeholder; use the exact returned hostname. The checked-in `netlify.toml` runs `node scripts/build-netlify.mjs` and publishes `out/`. That helper validates the backend HTTPS origin, forces `NEXT_PUBLIC_API_MODE=same-origin`, clears `NEXT_PUBLIC_API_URL`, and sets `NEXT_PUBLIC_SOCKET_URL` to the Render origin. After building, it writes a forced `/api/*` to `https://<actual-render-host>/api/:splat` HTTP 200 rewrite into `out/_redirects`. It does not proxy WebSocket traffic through Netlify. Never put PostgreSQL or JWT secrets in this public build variable.
+The checked-in `netlify.toml` runs `node scripts/build-netlify.mjs` and publishes `out/` when Netlify performs the build. That helper validates the backend HTTPS origin, forces `NEXT_PUBLIC_API_MODE=same-origin`, clears `NEXT_PUBLIC_API_URL`, and sets `NEXT_PUBLIC_SOCKET_URL` to the Render origin. After building, it writes a forced `/api/*` to `https://veilnivo-api-free.onrender.com/api/:splat` HTTP 200 rewrite into `out/_redirects`, plus `out/_headers` matching the security/cache headers in `netlify.toml` for manual uploads. It does not proxy WebSocket traffic through Netlify. Never put PostgreSQL or JWT secrets in this public build variable.
 
-For a manual build, set the same `VEILNIVO_BACKEND_ORIGIN` in the terminal and run `node scripts/build-netlify.mjs`, then upload the entire `out/` directory to the existing Netlify project. A custom frontend builder must reproduce the same three public connection settings and forced API rewrite together; configuring only a socket URL or only a proxy is incomplete.
+For the current manual workflow, set the same `VEILNIVO_BACKEND_ORIGIN` in the terminal and run `node scripts/build-netlify.mjs`, then upload the entire `out/` directory or a ZIP of its contents to the existing Netlify `veilnivo` project. Preserve root-level `index.html`, `_redirects`, `_headers`, `/login/` and assets. A custom frontend builder must reproduce the same three public connection settings, forced API rewrite and headers together; configuring only a socket URL or only a proxy is incomplete.
+
+If Turbopack's CSS worker fails to start on Windows, use `node scripts/build-netlify.mjs --webpack` to select Next.js's supported alternative builder. It uses the same connection settings, headers and API rewrite.
 
 Rebuild and redeploy the frontend after changing these settings. Public build settings are embedded in JavaScript, so a runtime-only environment edit does not repair an older static export. Deploy the complete `out/` output to Netlify, preserving `/login/` and its generated assets. A source ZIP cannot replace the built export in Netlify's manual deploy flow.
 
@@ -46,10 +68,12 @@ Render documents these limits in its [free-plan guide](https://render.com/docs/f
 - Free PostgreSQL has 1 GB of storage, expires 30 days after creation, and does not include managed backups or managed connection pooling. Expiry makes the database inaccessible; after the documented grace period, Render deletes it. A free beta is not indefinite production data retention.
 - The app service's filesystem is temporary. PostgreSQL contains accounts, relationships, encrypted messages, wrapped identity keys and encrypted attachments; do not move persistent data into the web container's local files.
 
-Record the database's actual expiry date from Render when it is created. Export data before that date if it must be retained. An operator must choose a continuing storage plan or perform a deliberate migration before expiry; rotating free databases does not preserve account identity and history automatically. No scheduled task or monitor is implied by this guide.
+The current database expires on **26 November 2026 at 4:05 PM IST**. Export data before that date if it must be retained. An operator must choose a continuing storage plan or perform a deliberate migration before expiry; rotating free databases does not preserve account identity and history automatically. No scheduled task or monitor is implied by this guide.
 
 ## Acceptance checks
 
-After the actual deployment, verify new identities in two separate browsers/devices, exact username and alias search, request acceptance, encrypted messages in both directions, lock/sign-in history recovery, and blocking. Check WebSocket reconnect after a backend restart and cold start, validate `/api/ready`, and confirm that direct access to source files and local ZIP delivery is unavailable on Render. Remove only generated QA identities after verification.
+The completed public smoke check used one browser and an independent Node WebCrypto client. It covered readiness, strict host-only HttpOnly cookies, sign-in, exact username search, request acceptance, direct cookie-free Render WebSockets, encrypted messages in both directions, and saved-history decryption. Only the two generated QA identities were erased afterward. The final browser view returned to the empty sign-in page.
+
+Further public acceptance checks remain: two separate browsers/devices, alias search, attachment delivery, lock/sign-in history recovery in the browser, blocking, reconnect after a backend restart and cold start, and source/local-ZIP access restrictions. Automated/local coverage for these features is recorded separately in [VERIFICATION.md](VERIFICATION.md). Repeat the relevant checks after deployment changes and remove only generated QA identities.
 
 Existing local-preview accounts, server accounts, encrypted browser caches and Netlify browser storage do not move automatically to the new deployment. Preserve the local database and credentials until any intended migration has been verified.

@@ -5,6 +5,7 @@
 - PASS: 83 automated tests against a fresh PostgreSQL 17.11 database, including SQL integration, exact-user search, local source delivery, client identity isolation, and Netlify/Render realtime tickets. Zero failures and zero skips after final source changes.
 - PASS: Both committed Prisma migrations applied to the isolated PostgreSQL database.
 - PASS: Optimized Next.js static export in explicit same-origin live mode, including TypeScript validation and direct `/login/` output.
+- PASS: Final Netlify packaging helper completed with `--webpack` on Windows, producing `/login/`, the exact Render API rewrite and security/cache headers. The Windows Turbopack PostCSS worker failed during its startup handshake; the supported alternative builder completed compilation and TypeScript checks.
 - PASS: Encryption/key recovery, authenticated routing, encrypted attachment access, idempotent sends, blocking, contact consent, account/session revocation, peer erasure, and SQL ciphertext checks.
 - PASS: Bounded Argon2 concurrency returns retryable HTTP 429 under saturation; passive sockets disconnect at database/JWT expiry; account-binding headers/handshakes reject another tab's changed cookie identity.
 - PASS: Successful authoritative contact snapshots purge removed peer history before cache decryption. Failed snapshots preserve data. Delayed callbacks and expiration events cannot restore deleted messages; sender acknowledgements preserve the shorter expiry.
@@ -18,13 +19,25 @@ The portable PostgreSQL archive came from the official EDB distribution linked b
 
 ## Deployment scope
 
-The initial delivery followed the user's **Keep everything local** choice. On 27 October the user requested a free Render backend for the separately uploaded `https://veilnivo.netlify.app` frontend. The free PostgreSQL instance has been provisioned in Singapore with external access disabled; its stated expiry is 26 November 2026. Publishing the reviewed source and deploying the connected backend/frontend remain separate steps and must be verified on the actual public site. No paid hosting plan is authorized. The source package excludes `.local` credentials and database files.
+The initial delivery followed the user's **Keep everything local** choice. On 27 October the user requested a free Render backend for the existing [Netlify frontend](https://veilnivo.netlify.app/) and explicitly approved uploading the reviewed source to [the public GitHub repository](https://github.com/sarthakchaudharys253-droid/Veilnivo). Source commit `a7aeec9c2d92291f2055406f346a5e9251413a0a` was deployed to Render, and the connected static export was published to the existing Netlify project. Later documentation/build-helper changes are separate from that verified source release. No paid hosting plan is authorized. The source package excludes `.local` credentials and database files.
+
+The Render Docker web service `veilnivo-api-free` (`srv-dbg80dmc6qcc73ekou90`) and PostgreSQL 17 database `veilnivo-db-free` (`dpg-dbg7spl9fdbs73d1ms7g-a`) both use Free plans in Singapore. The database external IP allowlist is empty. Its recorded expiry is **26 November 2026 at 4:05 PM IST** (`2026-11-26T10:35:18.553914Z`); a continuing storage plan or deliberate migration is required before expiry. See [NETLIFY-RENDER.md](NETLIFY-RENDER.md) for the current topology and update workflow.
 
 The separate local runner retains its application database and stable session secret across normal stop/restart. Its listeners use 127.0.0.1 and local HTTP; it is not an internet production endpoint. See [LOCAL-RUN.md](LOCAL-RUN.md).
 
+## Public deployment smoke check - 27 October 2026
+
+- PASS: Render built and ran the Docker release. Deployment `dep-dbg80duc6qcc73ekovfg` for source commit `a7aeec9c2d92291f2055406f346a5e9251413a0a` reached Live at `2026-10-27T10:45:52.752596Z`.
+- PASS: The rebuilt frontend was published to the existing Netlify project as deployment `6ae081632e04ccd398ebb90f`. This uses manual Drop uploads; Render backend updates deploy from Git, while frontend updates require a separate rebuild/upload.
+- PASS: Direct Render `/api/ready` returned HTTP 200 JSON `{"ok":true}`. Netlify `/api/ready` and `/api/health` returned production JSON through the same-origin proxy; `/login/` returned HTTP 200 HTML. Live external AI was unconfigured.
+- PASS: Two generated identities registered through the Netlify API proxy. Authentication cookies were Secure, HttpOnly, SameSite=Strict and host-only. Actual browser sign-in and exact username search succeeded, followed by an explicit connection request and recipient acceptance.
+- PASS: A browser on Netlify and an independent Node WebCrypto client exchanged and decrypted encrypted messages in both directions. The independent client authenticated its direct Render WebSocket using a single-use realtime ticket without a Cookie header.
+- PASS: The independent client recovered the recipient's private key, fetched saved HTTP message history through Netlify, and decrypted both synthetic messages from the PostgreSQL-backed history.
+- PASS: Exactly the two generated QA identities were erased through their own account-bound sessions. Existing user identities were not modified. The final browser screenshot, `outputs/Veilnivo-public-live.jpg`, shows the empty sign-in page with no QA identity.
+
 ## Remaining limits
 
-A Docker image was not executed here; the included CI workflow prepares that check for a future repository. Public HTTPS, provider infrastructure, multi-device internet delivery, billing, and live AI are not claimed as deployed. External AI is disabled in the local runner. An independent cryptographic/security audit and a reviewed forward-secrecy protocol remain outside the implemented scope; [SECURITY.md](SECURITY.md) describes the current protocol accurately.
+The public smoke check used one browser and an independent Node WebCrypto client. It did not establish two-browser/device interoperability, public attachment delivery, browser lock/sign-in history recovery, or backend restart/cold-start lifecycle behavior. Those remain public acceptance checks; automated and local coverage is recorded separately above and below. GitHub Actions execution has not been verified, although the workflow is included. Paid billing and live AI are inactive. An independent cryptographic/security audit and a reviewed forward-secrecy protocol remain outside the implemented scope; [SECURITY.md](SECURITY.md) describes the current protocol accurately.
 
 ## Connected local deployment smoke check
 

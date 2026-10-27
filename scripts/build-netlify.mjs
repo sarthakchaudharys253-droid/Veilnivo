@@ -18,11 +18,14 @@ if(process.argv.includes('--check')) {
 } else {
   const env={...process.env,NEXT_PUBLIC_API_MODE:'same-origin',NEXT_PUBLIC_API_URL:'',NEXT_PUBLIC_SOCKET_URL:origin,NEXT_TELEMETRY_DISABLED:'1'};
   const code=await new Promise((resolve,reject)=>{
-    const child=spawn(process.execPath,['node_modules/next/dist/bin/next','build'],{cwd:root,env,stdio:'inherit',shell:false});
+    const args=['node_modules/next/dist/bin/next','build',...(process.argv.includes('--webpack')?['--webpack']:[])];
+    const child=spawn(process.execPath,args,{cwd:root,env,stdio:'inherit',shell:false});
     child.once('error',reject);child.once('exit',code=>resolve(code??1));
   });
   if(code!==0)process.exit(code);
   // Only explicit API paths are proxied. Static Next exports retain /login/.
   await writeFile(path.join(root,'out','_redirects'),`/api/*  ${origin}/api/:splat  200!\n`,'utf8');
+  // Netlify Drop uploads contain only out/, so include the source config's headers.
+  await writeFile(path.join(root,'out','_headers'),'/*\n  X-Content-Type-Options: nosniff\n  Referrer-Policy: no-referrer\n  X-Frame-Options: DENY\n/api/*\n  Cache-Control: no-store\n','utf8');
   process.stdout.write(`Netlify export prepared: same-origin API and direct realtime at ${origin}.\n`);
 }

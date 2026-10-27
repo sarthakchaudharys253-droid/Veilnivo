@@ -1,10 +1,12 @@
 # Deploy Veilnivo
 
-The default `render.yaml` now prepares a free beta backend and PostgreSQL for the existing Netlify frontend at `https://veilnivo.netlify.app`. The free app sleeps after inactivity, and the free database expires after 30 days. Follow [NETLIFY-RENDER.md](NETLIFY-RENDER.md) for that integration, its data-retention limits and verification steps. Configuration files alone do not prove that a provider deployment is live.
+[Veilnivo on Netlify](https://veilnivo.netlify.app/) is connected to the free [Render backend](https://veilnivo-api-free.onrender.com/api/ready) and PostgreSQL in Singapore. The Docker deployment became Live on 27 October 2026. The deployed source is commit `a7aeec9c2d92291f2055406f346a5e9251413a0a` in [the public repository](https://github.com/sarthakchaudharys253-droid/Veilnivo); later documentation updates are separate from that verified release. See [VERIFICATION.md](VERIFICATION.md) for the public checks completed.
 
-The earlier paid combined-app configuration is preserved as `deploy/render-paid.yaml` for an explicit paid opt-in. In that alternative, Fastify serves the built frontend, `/api`, and Socket.io from one HTTPS origin. The source ZIP includes a backend verified against local PostgreSQL. The connected local deployment is documented in LOCAL-RUN.md; provider/container execution remains separate.
+The default `render.yaml` reproduces this free beta topology. The app sleeps after inactivity, and the current database expires on **26 November 2026 at 4:05 PM IST**. Follow [NETLIFY-RENDER.md](NETLIFY-RENDER.md) for the current resource IDs, update workflow and storage limits. Reuse these existing resources when updating this deployment.
 
-The existing hosted Sites preview remains a browser-local demonstration until a real Node service and database have been deployed. Adding an API URL to a provider dashboard does not change an already exported frontend. Local preview identities and history are not uploaded or converted into server accounts automatically.
+The earlier paid combined-app configuration is preserved as `deploy/render-paid.yaml` for an explicit paid opt-in. In that alternative, Fastify serves the built frontend, `/api`, and Socket.io from one HTTPS origin. The source ZIP also supports a separate connected local deployment documented in [LOCAL-RUN.md](LOCAL-RUN.md).
+
+The older hosted Sites preview remains a separate browser-local demonstration. Adding an API URL to a provider dashboard does not change an already exported frontend. Local preview identities and history are not uploaded or converted into server accounts automatically.
 
 ## Included deployment files
 
@@ -64,7 +66,7 @@ For a manual free Render deployment, choose Free for both PostgreSQL and the Doc
 
 To intentionally select the earlier paid combined-app alternative, review and choose `deploy/render-paid.yaml` as the Blueprint path instead of either free file. That configuration serves the frontend and backend on Render with `SERVE_FRONTEND=true`; its app and database plans incur charges. For its initial `onrender.com` address, leave both `APP_ORIGIN` and `CLIENT_ORIGIN` unset to use Render's `RENDER_EXTERNAL_URL`. Set the exact custom HTTPS origin when adding a custom domain. Switching from the free database requires a separate, verified migration; selecting a different Blueprint does not move accounts or history.
 
-Provider settings and charges are separate from repository preparation. This guide does not claim a Render service, a live database, or a successful remote deploy already exists.
+The current Render service and database both use Free plans. Backend updates deploy automatically from the repository's `main` branch. The existing Netlify project currently uses manual Drop uploads rather than Git-linked builds: rebuild with `VEILNIVO_BACKEND_ORIGIN=https://veilnivo-api-free.onrender.com`, then upload the complete generated `out/` output to that same project. A Git push alone does not update the Netlify frontend. Paid plans and database migration require a separate decision.
 
 ## Optional container hosts
 
@@ -128,10 +130,10 @@ Changing the frontend origin also changes access to browser-local storage. Exist
 4. Restart the service and repeat sign-in and delivery. Test reconnect/retry and expiration. On disposable accounts only, erase and verify separate local and confirmed server outcomes.
 5. Review application/provider logs for connection or migration errors without logging secrets, plaintext prompts, invitation tokens, or decrypted messages. Keep `/api` and `/socket.io` routed to Fastify.
 
-Local `pnpm typecheck`, `pnpm test`, and `pnpm build` do not prove a provider deployment works. PostgreSQL integration tests need an isolated, migrated `TEST_DATABASE_URL`; never use the production database for those tests. Docker, TLS, WebSockets, database connectivity, and two-device lifecycle checks must pass against the actual deployment before calling it operational. No live-provider, billing, independent-audit, or forward-secrecy claim follows from this setup; see [SECURITY.md](SECURITY.md).
+Local `pnpm typecheck`, `pnpm test`, and `pnpm build` do not prove a provider deployment works. PostgreSQL integration tests need an isolated, migrated `TEST_DATABASE_URL`; never use the production database for those tests. The current public deployment passed readiness, strict-cookie browser sign-in, exact search, request acceptance, bidirectional encrypted messaging between a browser and an independent Node WebCrypto client, and decryption of PostgreSQL-backed HTTP history. Two-browser/device testing, public attachment delivery, and restart/cold-start lifecycle checks remain to be completed. No active billing, independent-audit, or forward-secrecy claim follows from this setup; see [SECURITY.md](SECURITY.md).
 
-## Automated verification in a new repository
+## Automated verification
 
-The included `.github/workflows/verify.yml` runs TypeScript and all tests against a disposable PostgreSQL17 service, including the otherwise opt-in SQL integration test. It also builds the Docker image and checks the combined app's readiness and login page. This workflow is prepared for a future repository and has not run during this source-only handoff. Its disposable CI credentials are unrelated to deployment secrets.
+The included `.github/workflows/verify.yml` is configured to run TypeScript and all tests against a disposable PostgreSQL17 service, including the otherwise opt-in SQL integration test. It also builds the Docker image and checks the combined app's readiness and login page. Its execution in GitHub Actions has not been verified. Render separately built and ran the deployed Docker release successfully. The workflow's disposable CI credentials are unrelated to deployment secrets.
 
-Locally, use `pnpm typecheck`, `pnpm test`, and `pnpm build`. To run SQL integration, point `TEST_DATABASE_URL` only at a separate migrated test database. The verification record in [VERIFICATION.md](VERIFICATION.md) distinguishes completed local checks from pending container/provider checks.
+Locally, use `pnpm typecheck`, `pnpm test`, and `pnpm build`. To run SQL integration, point `TEST_DATABASE_URL` only at a separate migrated test database. The verification record in [VERIFICATION.md](VERIFICATION.md) distinguishes completed automated, local and public checks from remaining lifecycle checks.
