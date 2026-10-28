@@ -1,5 +1,6 @@
 import { BOT_CONTACT_ID } from './compat';
 import { base64ToBytes, bytesToBase64 } from './crypto';
+import {isReactionEmoji} from './reaction-emoji';
 
 export const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 export interface AttachmentMeta {
@@ -95,9 +96,10 @@ export interface ValidatedMessagePayload {
   targetId?: string;
   emoji?: string;
   active?: boolean;
+  editedAt?: number;
+  forwarded?: boolean;
 }
 const MESSAGE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const REACTION_EMOJI = new Set(['👍', '💚', '😂', '✨', '👀', '🎉']);
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -116,12 +118,14 @@ export function validateMessagePayload(
   if (!validTimestamp(value.timestamp) || typeof value.text !== 'string' || value.text.length > 10_000 || !['text', 'bot', 'reaction', 'system'].includes(value.type as string)) return invalid();
   if (value.id !== undefined && (typeof value.id !== 'string' || !MESSAGE_UUID.test(value.id))) return invalid();
   if (value.expiresAt !== undefined && (!validTimestamp(value.expiresAt) || value.expiresAt <= value.timestamp)) return invalid();
+  if (value.editedAt !== undefined && (!validTimestamp(value.editedAt) || value.editedAt < value.timestamp || value.type !== 'text')) return invalid();
+  if (value.forwarded !== undefined && (typeof value.forwarded !== 'boolean' || value.type !== 'text')) return invalid();
   if (value.replyTo !== undefined) {
     const reply = value.replyTo;
     if (!record(reply) || typeof reply.id !== 'string' || !MESSAGE_UUID.test(reply.id) || typeof reply.text !== 'string' || reply.text.length > 160 || typeof reply.own !== 'boolean') return invalid();
   }
   if (value.type === 'reaction') {
-    if (typeof value.targetId !== 'string' || !MESSAGE_UUID.test(value.targetId) || typeof value.emoji !== 'string' || !REACTION_EMOJI.has(value.emoji) || typeof value.active !== 'boolean') return invalid();
+    if (typeof value.targetId !== 'string' || !MESSAGE_UUID.test(value.targetId) || !isReactionEmoji(value.emoji) || typeof value.active !== 'boolean') return invalid();
   }
   if (value.attachment !== undefined) {
     const a = value.attachment;

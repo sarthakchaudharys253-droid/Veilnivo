@@ -18,6 +18,18 @@ export function invitationToken(value:unknown){if(typeof value!=='string'||!/^[A
 export async function tokenHash(token:string){return Buffer.from(await webcrypto.subtle.digest('SHA-256',new TextEncoder().encode(token))).toString('hex');}
 export function encryptedAttachment(value:unknown){const body=object(value);const size=body.size;if(typeof size!=='number'||!Number.isSafeInteger(size)||size<1||size>MAX_FILE_BYTES)throw new InputError('Choose a file of up to 10 MiB.');const ciphertext=base64(body.ciphertext,'encrypted file',undefined,MAX_FILE_BYTES+16);if(Buffer.from(ciphertext,'base64').length!==size+16)throw new InputError('Encrypted file size does not match its envelope.');return {recipientId:id(body.recipient_id),size,ciphertext,iv:base64(body.iv,'file IV',12)};}
 export function clientMessageId(value:unknown){return value===undefined?undefined:id(value);}
+export function deliveryExpiry(value:unknown,now=Date.now()):Date|null{
+ if(value===undefined||value===null)return null;
+ if(typeof value!=='string'||value.length>32)throw new InputError('Invalid message expiry.');
+ const date=new Date(value);
+ if(!Number.isFinite(date.getTime())||date.toISOString()!==value||date.getTime()<=now)throw new InputError('This message expired and cannot be sent.');
+ return date;
+}
+export function mutationRevision(value:unknown):number{
+ if(typeof value!=='number'||!Number.isInteger(value)||value<0||value>=2147483647)throw new InputError('Refresh this message before changing it.');
+ return value;
+}
+function messageActionError(message:string,statusCode:number){const error=new InputError(message);error.statusCode=statusCode;return error;}
 
 interface Options {app:FastifyInstance;database:PrismaClient;io:Server;authenticate:(request:FastifyRequest)=>Promise<void>;erasingUsers:Set<string>;activeSends:Map<string,Set<Promise<void>>>;online:(id:string)=>boolean}
 export function v2Services({app,database,io,authenticate,erasingUsers,activeSends,online}:Options){
@@ -29,12 +41,21 @@ export function v2Services({app,database,io,authenticate,erasingUsers,activeSend
  async function tracked<T>(participants:string[],fn:()=>Promise<T>):Promise<T>{ensureAvailable(...participants);let result:T;const task=(async()=>{result=await fn();})();for(const participant of new Set(participants)){const tasks=activeSends.get(participant)||new Set<Promise<void>>();tasks.add(task);activeSends.set(participant,tasks);}try{await task;return result!;}finally{for(const participant of participants){const tasks=activeSends.get(participant);tasks?.delete(task);if(!tasks?.size)activeSends.delete(participant);}}}
  function updated(a:string,b:string){io.to(room(a)).emit('contacts:updated');io.to(room(b)).emit('contacts:updated');}
  async function resolveUser(handle:string,tx:Db=database){return await tx.user.findUnique({where:{username:handle},select:{id:true,username:true,publicKeyJwk:true}})||await tx.alias.findUnique({where:{username:handle},select:{user:{select:{id:true,username:true,publicKeyJwk:true}}}}).then(alias=>alias?.user||null);}
- async function sendEncrypted(senderId:string,data:{recipient_id:string;ciphertext:string;iv:string;client_message_id?:string;attachment_id?:string},onCreated?:(message:Prisma.MessageGetPayload<{}>)=>void){
-  const recipientId=data.recipient_id;return tracked([senderId,recipientId],async()=>{
+ async function sendEncrypted(senderId:string,data:{recipient_id:string;ciphertext:string;iv:string;client_message_id?:string;attachment_id?:string;expires_at?:string},onCreated?:(message:Prisma.MessageGetPayload<{}>)=>void){
+  const recipientId=data.recipient_id,requestedExpiry=deliveryExpiry(data.expires_at);return tracked([senderId,recipientId],async()=>{
    const perform=()=>database.$transaction(async tx=>{
     const contact=senderId===recipientId?null:await accepted(senderId,recipientId,tx);
-    if(data.client_message_id){const nonce=await tx.sendNonce.findUnique({where:{senderId_clientMessageId:{senderId,clientMessageId:data.client_message_id}},include:{message:true}});if(nonce){if(nonce.recipientId!==recipientId)throw new InputError('That delivery identifier belongs to another conversation.');const existing=nonce.message;if(!existing||existing.expiresAt&&existing.expiresAt.getTime()<=Date.now())throw new InputError('This message expired and cannot be resent.');if(existing.ciphertext!==data.ciphertext||existing.iv!==data.iv)throw new InputError('A delivery identifier cannot be reused for different encrypted content.');return {message:existing,replayed:true};}}
-    const message=await tx.message.create({data:{senderId,recipientId,clientMessageId:data.client_message_id,ciphertext:data.ciphertext,iv:data.iv,expiresAt:expiresAt(contact?.ttlSeconds||0),deliveredAt:senderId!==recipientId&&online(recipientId)?new Date():null}});
+    if(data.client_message_id){
+     // Client UUIDs also identify encrypted local cache rows. Serialize the UUID
+     // namespace so another author cannot alias, edit or tombstone an old row.
+     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${data.client_message_id}))`;
+     const foreign=await tx.sendNonce.findFirst({where:{clientMessageId:data.client_message_id,senderId:{not:senderId}},select:{id:true}});
+     if(foreign)throw new InputError('This delivery identifier is unavailable.');
+    }
+    if(data.client_message_id){const nonce=await tx.sendNonce.findUnique({where:{senderId_clientMessageId:{senderId,clientMessageId:data.client_message_id}},include:{message:true}});if(nonce){if(nonce.recipientId!==recipientId)throw new InputError('That delivery identifier belongs to another conversation.');const existing=nonce.message;if(!existing||existing.deletedAt||existing.expiresAt&&existing.expiresAt.getTime()<=Date.now())throw new InputError('This message expired or was deleted and cannot be resent.');if(existing.ciphertext!==data.ciphertext||existing.iv!==data.iv)throw new InputError('A delivery identifier cannot be reused for different encrypted content.');return {message:existing,replayed:true};}}
+    const policyExpiry=expiresAt(contact?.ttlSeconds||0),deadline=requestedExpiry&&policyExpiry?new Date(Math.min(requestedExpiry.getTime(),policyExpiry.getTime())):requestedExpiry??policyExpiry;
+    if(deadline&&deadline.getTime()<=Date.now())throw new InputError('This message expired and cannot be sent.');
+    const message=await tx.message.create({data:{senderId,recipientId,clientMessageId:data.client_message_id,ciphertext:data.ciphertext,iv:data.iv,expiresAt:deadline,deliveredAt:senderId!==recipientId&&online(recipientId)?new Date():null}});
     if(data.attachment_id){const attached=await tx.attachment.updateMany({where:{id:data.attachment_id,ownerId:senderId,recipientId,messageId:null,orphanExpiresAt:{gt:new Date()}},data:{messageId:message.id,orphanExpiresAt:null,expiresAt:message.expiresAt}});if(attached.count!==1)throw new InputError("This encrypted file is unavailable, expired, or already attached.");}
     if(data.client_message_id)await tx.sendNonce.create({data:{senderId,recipientId,clientMessageId:data.client_message_id,messageId:message.id}});
     return {message,replayed:false};
@@ -42,6 +63,41 @@ export function v2Services({app,database,io,authenticate,erasingUsers,activeSend
    let result;try{result=await perform();}catch(error){if(error instanceof Prisma.PrismaClientKnownRequestError&&error.code==='P2002'&&data.client_message_id)result=await perform();else throw error;}if(!result.replayed&&!erasingUsers.has(senderId)&&!erasingUsers.has(recipientId))onCreated?.(result.message);return result;
   });
  }
+ async function mutateMessage(userId:string,messageId:string,expectedRevision:number,replacement?:{ciphertext:string;iv:string}){
+  const initial=await database.message.findFirst({where:{id:messageId,senderId:userId},select:{recipientId:true}});
+  if(!initial)throw messageActionError('This message is unavailable or is not yours.',404);
+  return tracked([userId,initial.recipientId],async()=>{
+   const message=await database.$transaction(async tx=>{
+    const row=await tx.message.findFirst({where:{id:messageId,senderId:userId}});
+    if(!row)throw messageActionError('This message is unavailable or is not yours.',404);
+    if(!replacement&&row.deletedAt)return row;
+    if(row.deletedAt||row.expiresAt&&row.expiresAt.getTime()<=Date.now())throw messageActionError('This message expired or was deleted.',410);
+    if(row.revision!==expectedRevision)throw messageActionError('This message changed. Refresh it before trying again.',409);
+    if(replacement&&userId!==row.recipientId)await accepted(userId,row.recipientId,tx);
+    const changed=await tx.message.updateMany({where:{id:messageId,senderId:userId,revision:expectedRevision,deletedAt:null,AND:[liveWhere()]},data:replacement?{ciphertext:replacement.ciphertext,iv:replacement.iv,revision:{increment:1}}:{ciphertext:'',iv:'',deletedAt:new Date(),revision:{increment:1}}});
+    if(changed.count!==1)throw messageActionError('This message changed or expired. Refresh it before trying again.',409);
+    if(!replacement)await tx.attachment.deleteMany({where:{messageId}});
+    const updated=await tx.message.findUniqueOrThrow({where:{id:messageId}});
+    if(updated.expiresAt&&updated.expiresAt.getTime()<=Date.now())throw messageActionError('This message expired.',410);
+    return updated;
+   });
+   if(!erasingUsers.has(userId)&&!erasingUsers.has(message.recipientId)){
+    const event=replacement?'message:updated':'message:deleted';
+    io.to(room(userId)).emit(event,message);
+    if(message.recipientId!==userId)io.to(room(message.recipientId)).emit(event,message);
+   }
+   return {message};
+  });
+ }
+ app.patch('/api/messages/:messageId',{preHandler:authenticate},async request=>{
+  const data=object(request.body),ciphertext=base64(data.ciphertext,'ciphertext');
+  if(Buffer.from(ciphertext,'base64').length<17)throw new InputError('Ciphertext is too short.');
+  return mutateMessage(request.principal.sub,id(object(request.params).messageId),mutationRevision(data.expected_revision),{ciphertext,iv:base64(data.iv,'message IV',12)});
+ });
+ app.delete('/api/messages/:messageId',{preHandler:authenticate},async request=>{
+  const data=object(request.body);
+  return mutateMessage(request.principal.sub,id(object(request.params).messageId),mutationRevision(data.expected_revision));
+ });
  app.get('/api/invitations',{preHandler:authenticate},async request=>({invitations:(await database.invitation.findMany({where:{creatorId:request.principal.sub},orderBy:{createdAt:'desc'},take:50,select:{id:true,expiresAt:true,usedAt:true,revokedAt:true}})).map(x=>({id:x.id,expires_at:x.expiresAt,used_at:x.usedAt,revoked_at:x.revokedAt}))}));
  app.post('/api/invitations',{preHandler:authenticate,config:{rateLimit:{max:20,timeWindow:'1 hour'}}},async(request,reply)=>{
   const userId=request.principal.sub;ensureAvailable(userId);const data=object(request.body);const ttl=ttlSeconds(data.expires_in??86400);if(!ttl)throw new InputError('Invitation must expire.');const token=Buffer.from(webcrypto.getRandomValues(new Uint8Array(32))).toString('base64url');
@@ -101,5 +157,5 @@ export function v2Services({app,database,io,authenticate,erasingUsers,activeSend
  app.delete('/api/aliases/:username',{preHandler:authenticate},async request=>{await database.alias.deleteMany({where:{userId:request.principal.sub,username:username(object(request.params).username)}});return {ok:true};});
  async function cleanupExpired(){const now=new Date();const expired=await database.message.findMany({where:{expiresAt:{lte:now}},select:{id:true,senderId:true,recipientId:true},take:1000});if(expired.length){await database.message.deleteMany({where:{id:{in:expired.map(x=>x.id)},expiresAt:{lte:now}}});for(const row of expired){io.to(room(row.senderId)).emit('message:expired',{message_id:row.id});if(row.senderId!==row.recipientId)io.to(room(row.recipientId)).emit('message:expired',{message_id:row.id});}}await database.attachment.deleteMany({where:{OR:[{expiresAt:{lte:now}},{orphanExpiresAt:{lte:now}}]}});await database.invitation.deleteMany({where:{expiresAt:{lt:new Date(now.getTime()-7*86400000)}}});}
  const cleanupTimer=setInterval(()=>{void cleanupExpired().catch(()=>undefined);},30_000);cleanupTimer.unref();app.addHook('onClose',async()=>clearInterval(cleanupTimer));
- return {blocked,accepted,resolveUser,sendEncrypted,cleanupExpired,tracked,ensureAvailable};
+ return {blocked,accepted,resolveUser,sendEncrypted,mutateMessage,cleanupExpired,tracked,ensureAvailable};
 }

@@ -9,7 +9,8 @@ A dark, two-pane encrypted messenger built with Next.js App Router, TypeScript, 
 - Single-use expiring invite links and locally generated QR codes; revocation and invite-led username/password onboarding.
 - Message requests, explicit acceptance/decline, blocking and unblocking. No public username directory.
 - Exact username and alias search with a result preview before sending a request. Existing connections open a chat; incoming requests open the review screen. Search is authenticated, rate limited, and hides blocked identities.
-- Replies, encrypted reaction events, local message/file-name search, explicit send states and an encrypted, idempotent outbox.
+- Message selection, editing, forwarding, replies, encrypted emoji reactions, local message/file-name search, explicit send states and an encrypted, idempotent outbox.
+- A phone chat keyboard with letters, numbers, symbols, shift/caps lock, cursor controls, emoji and send. The chat composer suppresses the native phone keyboard; desktop typing remains available.
 - Searchable native emoji picker with all 3,944 Unicode 17 emoji, nine categories, skin-tone and mixed-tone variants, and session-only recent emoji. It loads when opened and inserts at the cursor without replacing the rest of a draft. Emoji designs follow the device font.
 - Off / 1 hour / 24 hours / 7 days message timers. New messages use the selected timer; existing messages retain theirs.
 - Files up to 10 MiB, each encrypted with its own random AES-GCM key. Keys, filenames and MIME metadata travel only inside encrypted messages. User-triggered downloads use short-lived object URLs.
@@ -31,6 +32,16 @@ pnpm dev
 With neither `NEXT_PUBLIC_API_MODE` nor `NEXT_PUBLIC_API_URL` configured, the app opens a labeled sample workspace. Contacts and requests in that workspace are examples. Veil AI is a deterministic local helper, not a hosted model. Create your own identity in Settings to test accounts, aliases, invite acceptance and encrypted history. Local identities created in the same browser origin can connect through requests or invitations. Cross-device invitations and remote messages require the backend.
 
 For a clean local account workspace, open `/login/` and create an identity. Real account workspaces start empty except the optional assistant. Lock and sign in again to restore encrypted history. Prior v1 local identities are migrated on successful login.
+
+## Message controls
+
+Press and hold a message, right-click it, or use its More button to reply, react, select, forward, edit an own sent message, or delete. Double-click a message to open the full emoji reaction picker. On touch screens, swipe a received message from left to right or an own message from right to left to reply. Selection supports up to 50 messages; forwarding supports up to five accepted contacts and 50 copies per operation.
+
+Delete for me hides the message on the current device and clears its local cached copy. Other people retain their copy. Delete for everyone applies to your own sent messages: the server removes message ciphertext and attached files, retaining a content-free deletion record to synchronize clients and prevent retries restoring it. Copies already exported or downloaded cannot be recalled.
+
+Forwarding creates a fresh encrypted message for each recipient, with a Forwarded marker and no source identity. Files receive fresh encryption keys and attachment IDs. The forwarded copy expires at the earlier of the original message's expiry and the destination conversation's timer.
+
+On phones, touching the chat composer opens the Veilnivo keyboard. It uses an English QWERTY layout with numbers and symbols, including ₹; it does not provide operating-system dictation, autocorrect or multilingual input methods. The emoji button opens the searchable emoji picker. Hide the keyboard with its down-arrow control.
 
 ## Production backend
 
@@ -58,7 +69,7 @@ This is not a zero-metadata service: the server sees account IDs, routing, timin
 
 Timers run from message sending time and apply to new messages. Online clients remove expired local messages/files; server reads filter expired rows immediately and a periodic cleanup removes database copies. Cleanup occurs when clients/server run. Application expiry cannot retract screenshots, exported files or downloaded copies.
 
-Each uploaded file expires after 15 minutes if it is never sent. Successful sends atomically bind attachments to messages and inherit the message expiry. Message deletion cascades to the encrypted file. Retry tombstones prevent replaying an expired message back into history.
+Each uploaded file expires after 15 minutes if it is never sent. Successful sends atomically bind attachments to messages and inherit the message expiry. Delete for everyone removes the attached encrypted file; Delete for me affects only the current device. Retry tombstones prevent replaying an expired or deleted message back into history.
 
 Erase drops keys/sockets, clears localStorage/sessionStorage and origin IndexedDB databases, and in live mode requests atomic account/message/file deletion. Local and server states are displayed separately. Offline server deletion is unconfirmed; while the page remains open, the HttpOnly-cookie request retries on reconnection with an expected-user guard. Reloading or changing identities cancels that memory-only retry. Network latency prevents a universal under-500ms guarantee. Infrastructure backups and recipient copies are outside the application deletion boundary.
 

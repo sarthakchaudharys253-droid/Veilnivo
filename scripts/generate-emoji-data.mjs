@@ -36,6 +36,7 @@ if(rows.length!==3944||new Set(rows.map(row=>row[0])).size!==3944)throw new Erro
 const data={version:'17.0',source,sourceSha256,license:'Unicode License V3; see public/unicode-license.txt',categories,rows};
 await mkdir(path.join(root,'public'),{recursive:true});
 await writeFile(path.join(root,'src','lib','emoji-data.json'),JSON.stringify(data)+'\n','utf8');
+await writeFile(path.join(root,'src','lib','reaction-emoji-data.json'),JSON.stringify(rows.map(row=>row[0]))+'\n','utf8');
 await writeFile(path.join(root,'public','unicode-license.txt'),license,'utf8');
 await writeFile(path.join(root,'public','emoji-attribution.txt'),`Emoji character sequences and names: Unicode Emoji17.0\n${source}\nSource SHA-256: ${sourceSha256}\nCopyright © 2025 Unicode, Inc.\nRedistributed under Unicode License V3. See unicode-license.txt.\n\nVeilnivo uses your device's native emoji font. No Apple emoji artwork or fonts are distributed with this application. Appearance and support for newer sequences depend on your device.\n`,'utf8');
 console.log(`Generated ${rows.length} fully qualified Emoji17.0 sequences in ${categories.length} categories.`);

@@ -14,7 +14,7 @@ import { PrismaClient, Prisma } from "@prisma/client";
 import argon2 from "argon2";
 import { Server as SocketServer } from "socket.io";
 import { webcrypto } from "node:crypto";
-import { v2Services, clientMessageId, liveWhere } from "./v2";
+import { v2Services, clientMessageId, deliveryExpiry, liveWhere } from "./v2";
 
 import { InputError, base64, envelope, id, object, registration, username, encodeHistoryCursor, parseHistoryCursor } from "./validation";
 
@@ -33,13 +33,13 @@ export async function buildServer(env: NodeJS.ProcessEnv = process.env, database
   const app = Fastify({logger:false, bodyLimit:192 * 1024, trustProxy:config.trustProxy});
   let shuttingDown = false;
   const io = new SocketServer(app.server, {
-    cors:{origin, credentials:true, methods:["GET","POST","PUT","DELETE"]},
+    cors:{origin, credentials:true, methods:["GET","POST","PUT","PATCH","DELETE"]},
     maxHttpBufferSize:192 * 1024,
     allowRequest:(request, callback) => callback(null, request.headers.origin === origin),
     transports:["websocket"],
   });
   await app.register(cookie);
-  await app.register(cors, {origin, credentials:true, methods:["GET","POST","PUT","DELETE"], allowedHeaders:["Content-Type","X-Veilnivo-Account"]});
+  await app.register(cors, {origin, credentials:true, methods:["GET","POST","PUT","PATCH","DELETE"], allowedHeaders:["Content-Type","X-Veilnivo-Account"]});
   await app.register(jwt, {secret:env.JWT_SECRET, cookie:{cookieName:COOKIE,signed:false}});
   // The IP limiter is transient process memory and does not log request bodies.
   await app.register(rateLimit, {max:180,timeWindow:"1 minute"});
@@ -331,7 +331,8 @@ export async function buildServer(env: NodeJS.ProcessEnv = process.env, database
         if (!await database.user.findUnique({where:{id:data.recipient_id},select:{id:true}})) throw new InputError("That user no longer exists.");
         if (erasingUsers.has(userId) || erasingUsers.has(data.recipient_id)) throw new InputError("This account is being erased.");
         const transport=object(body);
-        const result=await v2.sendEncrypted(userId,{...data,client_message_id:clientMessageId(transport.client_message_id),attachment_id:transport.attachment_id===undefined?undefined:id(transport.attachment_id)},message=>{io.to(room(data.recipient_id)).emit("message:receive",message);socket.to(room(userId)).emit("message:receive",message);});
+        const requestedExpiry=deliveryExpiry(transport.expires_at);
+        const result=await v2.sendEncrypted(userId,{...data,client_message_id:clientMessageId(transport.client_message_id),attachment_id:transport.attachment_id===undefined?undefined:id(transport.attachment_id),expires_at:requestedExpiry?.toISOString()},message=>{io.to(room(data.recipient_id)).emit("message:receive",message);socket.to(room(userId)).emit("message:receive",message);});
         if(typeof ack==="function")ack(result);
       } catch (error) {if (typeof ack === "function") ack({error:error instanceof InputError ? error.message : "Unable to send this message. Reconnect and try again."});}
     });

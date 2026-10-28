@@ -2,7 +2,7 @@ import {io,type Socket} from 'socket.io-client';
 import {API_URL,SOCKET_URL,currentBackendConnectionError} from './backend-config';
 export {API_URL,API_ENABLED,SOCKET_URL,currentBackendConnectionError} from './backend-config';
 export interface ServerIdentity {user:{id:string;username:string};public_key:JsonWebKey|string;encrypted_private_key:string;wrap_iv:string}
-export interface WireMessage {id:string;senderId:string;recipientId:string;ciphertext:string;iv:string;createdAt:string;clientMessageId?:string|null;expiresAt?:string|null;deliveredAt?:string|null;readAt?:string|null}
+export interface WireMessage {id:string;senderId:string;recipientId:string;ciphertext:string;iv:string;createdAt:string;clientMessageId?:string|null;expiresAt?:string|null;deliveredAt?:string|null;readAt?:string|null;revision?:number;deletedAt?:string|null}
 export class ApiError extends Error {constructor(message:string,public readonly status:number){super(message);this.name='ApiError'}}
 let expectedAccountId:string|null=null,accountRevision=0;
 const closeTicketSockets=new Set<()=>void>();

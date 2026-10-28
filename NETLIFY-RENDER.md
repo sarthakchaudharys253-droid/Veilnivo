@@ -23,6 +23,8 @@ Both Render resources use Free plans in Singapore. The existing database was ass
 
 The current Render service was created from a public repository URL, which requires a manual deploy of the latest `main` commit. Its auto-deploy setting alone does not establish a connected Git provider. Check for an existing deployment before triggering one; connecting a Git provider separately can enable automatic deploys. The existing Netlify project uses manual Drop uploads and is not linked to Git. Frontend changes require a local rebuild and upload to the same Netlify project unless Git-based Netlify deployment is configured separately. Reuse these resources; do not create a second project or database for routine updates.
 
+The message-actions update adds sender-authorized edits/deletion, encrypted forwarding, message selection/replies/reactions, touch swipe replies, double-click reactions and the phone chat keyboard. Its additive migration, `202610280000_message_actions`, adds revision/deletion metadata and a nonce lookup index; it does not reset accounts or history. Deploy the backend and let its committed migration complete before publishing the matching frontend. Refresh existing browser tabs afterward so they load the updated client. Local checks passed; public release evidence must be recorded separately in [VERIFICATION.md](VERIFICATION.md) before treating this update as deployed.
+
 ## Render resources
 
 The default `render.yaml` defines only the free beta resources. `render-free.yaml` is an identical explicit free copy. The previous paid configuration is preserved separately as `deploy/render-paid.yaml` and requires a deliberate paid opt-in; do not apply it for this free-only setup.

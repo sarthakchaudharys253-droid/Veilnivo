@@ -1,13 +1,13 @@
-# Veilnivo verification â€” 27 October 2026
+# Veilnivo verification - 28 October 2026
 
 ## Completed checks
 
-- PASS: 101 automated tests against a fresh PostgreSQL 17.11 database, including SQL integration, exact-user search, local source delivery, client identity isolation, Netlify/Render realtime tickets, typing lifecycle regressions and emoji catalog/insertion checks. Zero failures and zero skips.
+- PASS: 126 automated tests against a fresh PostgreSQL 17.11 database, including SQL integration, message mutation and forwarding, identity/replay isolation, keyboard input, touch gesture rules, exact-user search, local source delivery, Netlify/Render realtime tickets, typing lifecycle regressions and emoji catalog/insertion checks. Zero failures and zero skips.
 - PASS: The bundled Unicode 17 catalog contains all 3,944 fully qualified sequences, including exact mixed-tone variants, with nine categories. Every sequence is reachable from its base entry. Local search aliases, skin-tone selection, Unicode-safe cursor replacement and composer length limits are covered. The official data generator verifies its pinned source checksum; Unicode License V3 and attribution are included. No Apple artwork or font is bundled; rendering uses the device's native emoji font.
 - PASS: Typing starts only after real input, stops after 1.5 seconds idle and on send/blur/chat cleanup, and expires after six seconds if a stop event is lost. Tests cover offline peers, disconnect/reconnect, message arrival, chat/account changes, AI isolation, immediate server stop signals, late authorization after disconnect and multi-tab presence.
-- PASS: Both committed Prisma migrations applied to the isolated PostgreSQL database.
-- PASS: Optimized Next.js static export in explicit same-origin live mode, including TypeScript validation and direct `/login/` output.
-- PASS: Final Netlify packaging helper completed with `--webpack` on Windows, producing `/login/`, the exact Render API rewrite and security/cache headers. The Windows Turbopack PostCSS worker failed during its startup handshake; the supported alternative builder completed compilation and TypeScript checks.
+- PASS: All three committed Prisma migrations applied to the isolated PostgreSQL database, including the additive message revision/deletion migration.
+- PASS (previous published release): Optimized Next.js static export in explicit same-origin live mode, including TypeScript validation and direct `/login/` output.
+- PASS (previous published release): Netlify packaging helper completed with `--webpack` on Windows, producing `/login/`, the exact Render API rewrite and security/cache headers. The Windows Turbopack PostCSS worker failed during its startup handshake; the supported alternative builder completed compilation and TypeScript checks.
 - PASS: Encryption/key recovery, authenticated routing, encrypted attachment access, idempotent sends, blocking, contact consent, account/session revocation, peer erasure, and SQL ciphertext checks.
 - PASS: Bounded Argon2 concurrency returns retryable HTTP 429 under saturation; passive sockets disconnect at database/JWT expiry; account-binding headers/handshakes reject another tab's changed cookie identity.
 - PASS: Successful authoritative contact snapshots purge removed peer history before cache decryption. Failed snapshots preserve data. Delayed callbacks and expiration events cannot restore deleted messages; sender acknowledgements preserve the shorter expiry.
@@ -18,6 +18,15 @@
 - PASS: The optional Netlify bridge preserves strict HttpOnly cookies through same-origin HTTP API requests. Direct cookie-free WebSockets use single-use opaque tickets capped at 30 seconds, with session/account binding, expiry/revocation checks, bounded memory, and race protection. Client tests cover fresh reconnect tickets, namespace retries, lock cancellation, malformed tickets, and abortable backend warmup without replaying authentication mutations.
 
 The portable PostgreSQL archive came from the official EDB distribution linked by PostgreSQL.org; its SHA-256 matched the vendor-published checksum before execution. Verification used a random password, loopback-only listener, and a disposable cluster that was stopped and removed afterward. No Windows service was registered.
+
+## Message actions and phone keyboard - local verification, 28 October 2026
+
+- PASS: Sender-only revision-checked edits/deletion, encrypted file removal, content-free deletion history, replay rejection, expiry limits, blocked contacts, erasure races and foreign-sender nonce reuse were exercised against real PostgreSQL.
+- PASS: Client checks cover stale history/events/acknowledgements, account/conversation changes, cached identity binding, hidden-message persistence, reply redaction, forwarding source changes during encryption, fresh recipient attachment encryption and all 3,944 accepted Unicode reaction sequences.
+- PASS: Local browser checks edited a sample message, opened the full reaction picker by double-click, selected a reaction and forwarded a sample message to another sample conversation.
+- PASS: At a 375 by 812 browser viewport, touching the composer opened the Veilnivo keyboard. Its buttons typed `hello World12` using shift, numbers and backspace. The composer had `readOnly=true` and `inputmode=none`.
+- PASS: Directional touch-swipe rules and Unicode-aware cursor/deletion operations have automated coverage. After the final attachment-card interaction changes, gesture tests and whole-project TypeScript validation passed again.
+- These are local checks. The new production build, backend migration rollout and public browser acceptance checks are not recorded as complete in this section. Actual phone hardware gestures, operating-system keyboard behavior and multilingual input methods were not tested.
 
 ## Deployment scope
 

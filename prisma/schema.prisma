@@ -124,6 +124,8 @@ model Message {
   expiresAt       DateTime?
   deliveredAt     DateTime?
   readAt          DateTime?
+  revision        Int       @default(0)
+  deletedAt       DateTime?
   sender          User @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
   recipient       User @relation("ReceivedMessages", fields: [recipientId], references: [id], onDelete: Cascade)
   nonce           SendNonce?
@@ -147,4 +149,5 @@ model SendNonce {
   message Message? @relation(fields:[messageId],references:[id],onDelete:SetNull)
   @@unique([senderId,clientMessageId])
   @@index([recipientId])
+  @@index([clientMessageId])
 }
