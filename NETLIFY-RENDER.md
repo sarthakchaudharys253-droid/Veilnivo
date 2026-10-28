@@ -1,6 +1,6 @@
 # Netlify frontend and free Render backend
 
-The free beta is deployed at [veilnivo.netlify.app](https://veilnivo.netlify.app/) with its [Render backend](https://veilnivo-api-free.onrender.com/api/ready) and PostgreSQL connected. The 28 October 2026 message-actions release passed public checks for editing, replies, emoji reactions, selection, encrypted text/file forwarding, sender deletion through the API, keyboard-authored delivery and browser sign-in recovery. Exactly three generated QA identities were erased through their own account-bound sessions; existing user identities were not modified. A subsequent frontend update restores normal phone/laptop keyboard typing and removes the website keyboard; publication and acceptance checks for that update are pending. See [VERIFICATION.md](VERIFICATION.md) for the precise scope and earlier messaging checks.
+The free beta is deployed at [veilnivo.netlify.app](https://veilnivo.netlify.app/) with its [Render backend](https://veilnivo-api-free.onrender.com/api/ready) and PostgreSQL connected. The 28 October 2026 message-actions release passed public checks for editing, replies, emoji reactions, selection, encrypted text/file forwarding, sender deletion through the API, keyboard-authored delivery and browser sign-in recovery. Exactly three generated QA identities were erased through their own account-bound sessions; existing user identities were not modified. A subsequent frontend update, published at 2:21 PM IST, restores normal phone/laptop keyboard typing and removes the website keyboard. Its public browser checks passed standard text entry, multiline input and emoji insertion with an editable composer at laptop and phone sizes. See [VERIFICATION.md](VERIFICATION.md) for the precise scope and earlier messaging checks.
 
 ## Current deployment record
 
@@ -10,13 +10,13 @@ The free beta is deployed at [veilnivo.netlify.app](https://veilnivo.netlify.app
 | Public backend | https://veilnivo-api-free.onrender.com |
 | Source | https://github.com/sarthakchaudharys253-droid/Veilnivo |
 | Backend source commit | `3cfcbbf362c1fc630aa77b32d39494fea7016a18` |
-| Frontend source commit | `3cfcbbf362c1fc630aa77b32d39494fea7016a18` |
+| Frontend source commit | `391bf4946860b2c99e2799a61bff473ea708ecec` |
 | Render workspace | My Workspace, `tea-dbfikelg1s2s73fvboag` |
 | Render Blueprint | `veilnivo-netlify-free` |
 | Render web service | `veilnivo-api-free`, `srv-dbg80dmc6qcc73ekou90` |
 | Verified Live backend deploy | `dep-dbgqrm7f3r2c73aeq40g` at `2026-10-28T08:12:52.121906Z` |
 | Render database | `veilnivo-db-free`, `dpg-dbg7spl9fdbs73d1ms7g-a` |
-| Published Netlify deploy | `6ae1aeb09637aa48d2817c8f`, 28 October 2026, 1:43 PM IST |
+| Published Netlify deploy | `6ae1b7762c51778be3d981c8`, 28 October 2026, 2:21 PM IST |
 | Database expiry | **26 November 2026, 4:05 PM IST** (`2026-11-26T10:35:18.553914Z`) |
 
 Both Render resources use Free plans in Singapore. The existing database was associated with the Blueprint, preserving that resource. Later documentation/build-helper updates do not change the source commit recorded for the verified release above.

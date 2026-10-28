@@ -75,7 +75,9 @@ The separate local runner retains its application database and stable session se
 
 - PASS: Removed the website keyboard, phone-composer read-only/input-mode suppression, custom paste/key interception and the unused keyboard helper/component. The composer is a normal editable textarea for phone and laptop input; Enter still sends, Shift+Enter inserts a newline, and composition confirmation does not send unfinished IME text.
 - PASS: All 11 focused emoji insertion, typing lifecycle, message gesture and message-action tests passed. The production webpack build completed successfully, including TypeScript validation. Its validated Netlify ZIP contains 50 static files (489,034 bytes), including the API rewrite and security headers.
-- Publication and public native-input checks are pending. No backend change or database migration is required.
+- PASS: Frontend source `391bf4946860b2c99e2799a61bff473ea708ecec` was published as Netlify deployment `6ae1b7762c51778be3d981c8` on 28 October at 2:21 PM IST. The existing Render backend and database were unchanged.
+- PASS: The public laptop-sized browser accepted sequential key input and Shift+Enter produced a newline. At a 375 by 812 viewport, the composer remained editable (`readOnly=false`, no `inputmode` override), accepted text and inserted a rocket emoji while preserving the draft. No website keyboard was present. The screenshot is `outputs/Veilnivo-native-keyboard-restored.jpg`; this desktop browser check does not simulate an actual phone's OS keyboard.
+- PASS: No message or AI prompt was sent during this input check. The single generated QA identity was removed through its own account-bound session. The browser returned to a clean sign-in screen and its temporary viewport was reset.
 
 ## Remaining limits
 
