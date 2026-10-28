@@ -2,7 +2,7 @@
 
 ## Completed checks
 
-- PASS: 126 automated tests against a fresh PostgreSQL 17.11 database, including SQL integration, message mutation and forwarding, identity/replay isolation, keyboard input, touch gesture rules, exact-user search, local source delivery, Netlify/Render realtime tickets, typing lifecycle regressions and emoji catalog/insertion checks. Zero failures and zero skips.
+- PASS: 139 automated tests against a fresh PostgreSQL 17.11 database, including SQL integration, message mutation and forwarding, first-read deletion windows, identity/replay isolation, touch gesture rules, exact-user search, local source delivery, Netlify/Render realtime tickets, typing lifecycle regressions and emoji catalog/insertion checks. Zero failures and zero skips.
 - PASS: The bundled Unicode 17 catalog contains all 3,944 fully qualified sequences, including exact mixed-tone variants, with nine categories. Every sequence is reachable from its base entry. Local search aliases, skin-tone selection, Unicode-safe cursor replacement and composer length limits are covered. The official data generator verifies its pinned source checksum; Unicode License V3 and attribution are included. No Apple artwork or font is bundled; rendering uses the device's native emoji font.
 - PASS: Typing starts only after real input, stops after 1.5 seconds idle and on send/blur/chat cleanup, and expires after six seconds if a stop event is lost. Tests cover offline peers, disconnect/reconnect, message arrival, chat/account changes, AI isolation, immediate server stop signals, late authorization after disconnect and multi-tab presence.
 - PASS: All three committed Prisma migrations applied to the isolated PostgreSQL database, including the additive message revision/deletion migration.
@@ -86,6 +86,13 @@ The separate local runner retains its application database and stable session se
 - PASS: At a 375 by 812 public browser viewport, the Messages heading/search/tabs block measured 132px versus 179px before the change (47px, about 26% shorter). The title row is 48px, search 40px and tabs 40px with a 4px gap. Heading action buttons retain 44px targets; search text is 16px and the phone shortcut hint is hidden. There was no horizontal overflow.
 - PASS: The lower invitation card is absent. Local conversation search/filter controls work, and user lookup and the header invitation dialog still open. The compact CSS is scoped to widths at or below 700px.
 - PASS: One generated QA identity was removed through its own account-bound session. No message or AI prompt was sent; existing accounts/messages were untouched. The temporary viewport override was reset and the browser returned to a clean sign-in page. Screenshots are `outputs/Veilnivo-sidebar-before.jpg` and `outputs/Veilnivo-sidebar-compact.jpg`.
+
+## In-bubble menus and first-read deletion cutoff - local validation, 28 October 2026
+
+- PASS: All 139 regression tests passed with real PostgreSQL integration enabled. All three existing migrations applied to the disposable database; this update needs no new migration. The cluster was stopped and removed afterward. The production webpack build and TypeScript validation also passed.
+- PASS: SQL checks enforce deletion while unread and strictly before 30 minutes after first recipient read, reject spoofed timestamps, preserve the first read through retries/concurrent reads/edits, allow edits after the deletion window closes and recheck the cutoff after row-lock waits. New SQL clock operations stay UTC under non-UTC database sessions.
+- PASS: Client checks retain first-read metadata across early receipts, delayed acknowledgements, stale snapshots, edits, cache and sign-in recovery. Missing read timestamps fail closed; expired deletion preflight sends no network mutation. Logical IDs and server record IDs cannot alias receipt/revision/deletion state, and new delivery nonces cannot reuse existing server record IDs.
+- The UI puts unboxed dots inside each bubble, top right for own messages and top left for received messages. The menu explicitly includes Edit message for own stable peer messages. The delete dialog explains the 30-minute rule, shows the earliest selection deadline and disables the action after the cutoff. Public release checks are pending.
 
 ## Remaining limits
 

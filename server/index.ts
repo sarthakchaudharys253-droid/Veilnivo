@@ -356,12 +356,7 @@ export async function buildServer(env: NodeJS.ProcessEnv = process.env, database
       try {
         await allowed();
         const messageId=id(object(body).message_id);
-        const message=await database.message.findFirst({where:{id:messageId,recipientId:userId,readAt:null,AND:[liveWhere()]},select:{id:true,senderId:true}});
-        if (!message) return;
-        await v2.accepted(userId,message.senderId);
-        const at=new Date();
-        await database.message.updateMany({where:{id:message.id,recipientId:userId,readAt:null},data:{readAt:at,deliveredAt:at}});
-        io.to(room(message.senderId)).emit("message:receipt",{message_id:message.id,status:"read",at:at.toISOString()});
+        await v2.markMessageRead(userId,messageId);
       } catch { /* Invalid receipts do not affect message contents. */ }
     });
     socket.on("disconnect",() => {if (!online(userId)) void announcePresence(userId).catch(() => undefined);});

@@ -29,11 +29,12 @@ export function ForwardMessagesDialog({messages,contacts,busy,error,onClose,onFo
  </Dialog>;
 }
 
-export function DeleteMessagesDialog({count,canDeleteEveryone,busy,error,onClose,onDelete}:{count:number;canDeleteEveryone:boolean;busy:boolean;error:string|null;onClose:()=>void;onDelete:(scope:'me'|'everyone')=>void}){
+export function DeleteMessagesDialog({count,canDeleteEveryone,deleteEveryoneDisabledReason,deleteEveryoneExpiresAt,busy,error,onClose,onDelete}:{count:number;canDeleteEveryone:boolean;deleteEveryoneDisabledReason?:string;deleteEveryoneExpiresAt?:number;busy:boolean;error:string|null;onClose:()=>void;onDelete:(scope:'me'|'everyone')=>void}){
  return <Dialog title={count===1?'Delete message?':`Delete ${count} messages?`} onClose={onClose}>
   <p className={styles.intro}>Delete for me hides {count===1?'this message':'these messages'} from this device. Other people keep their copy.</p>
   {canDeleteEveryone&&<p className={styles.intro}>Delete for everyone replaces your sent {count===1?'message':'messages'} with a “Message deleted” marker and removes the original encrypted content and attachments from the server.</p>}
+  {canDeleteEveryone&&<div className={styles.deleteNotice} role="status">{deleteEveryoneDisabledReason||<>Available while unread and for 30 minutes after the other person first reads it.{deleteEveryoneExpiresAt&&<> This selection can be deleted until {new Date(deleteEveryoneExpiresAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'})}.</>}</>}</div>}
   {error&&<p className={styles.error} role="alert">{error}</p>}
-  <div className={styles.deleteActions}>{canDeleteEveryone&&<button type="button" className="danger-button" disabled={busy} onClick={()=>onDelete('everyone')}><Trash2 size={15}/>{busy?'Deleting…':'Delete for everyone'}</button>}<button type="button" className="secondary-button" disabled={busy} onClick={()=>onDelete('me')}><Trash2 size={15}/>Delete for me</button><button type="button" className="text-button" disabled={busy} onClick={onClose}>Cancel</button></div>
+  <div className={styles.deleteActions}>{canDeleteEveryone&&<button type="button" className="danger-button" disabled={busy||!!deleteEveryoneDisabledReason} onClick={()=>onDelete('everyone')}><Trash2 size={15}/>{busy?'Deleting…':'Delete for everyone'}</button>}<button type="button" className="secondary-button" disabled={busy} onClick={()=>onDelete('me')}><Trash2 size={15}/>Delete for me</button><button type="button" className="text-button" disabled={busy} onClick={onClose}>Cancel</button></div>
  </Dialog>;
 }

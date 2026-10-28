@@ -30,6 +30,12 @@ export function mutationRevision(value:unknown):number{
  return value;
 }
 function messageActionError(message:string,statusCode:number){const error=new InputError(message);error.statusCode=statusCode;return error;}
+// A database clock expression keeps the boundary atomic even if a row lock waits.
+// Tests can supply a fixed trusted clock expression to verify the exact cutoff.
+export function messageDeletionWindow(now:Prisma.Sql=Prisma.sql`(clock_timestamp() AT TIME ZONE 'UTC')`){
+ return Prisma.sql`("readAt" IS NULL OR "readAt" + INTERVAL '30 minutes' > ${now})`;
+}
+const DELETE_WINDOW_ERROR='Delete for everyone is available only for 30 minutes after the message is first read.';
 
 interface Options {app:FastifyInstance;database:PrismaClient;io:Server;authenticate:(request:FastifyRequest)=>Promise<void>;erasingUsers:Set<string>;activeSends:Map<string,Set<Promise<void>>>;online:(id:string)=>boolean}
 export function v2Services({app,database,io,authenticate,erasingUsers,activeSends,online}:Options){
@@ -53,6 +59,9 @@ export function v2Services({app,database,io,authenticate,erasingUsers,activeSend
      if(foreign)throw new InputError('This delivery identifier is unavailable.');
     }
     if(data.client_message_id){const nonce=await tx.sendNonce.findUnique({where:{senderId_clientMessageId:{senderId,clientMessageId:data.client_message_id}},include:{message:true}});if(nonce){if(nonce.recipientId!==recipientId)throw new InputError('That delivery identifier belongs to another conversation.');const existing=nonce.message;if(!existing||existing.deletedAt||existing.expiresAt&&existing.expiresAt.getTime()<=Date.now())throw new InputError('This message expired or was deleted and cannot be resent.');if(existing.ciphertext!==data.ciphertext||existing.iv!==data.iv)throw new InputError('A delivery identifier cannot be reused for different encrypted content.');return {message:existing,replayed:true};}}
+    // Server record UUIDs share client cache namespaces with logical IDs. New
+    // deliveries cannot alias an existing record; valid old replays return above.
+    if(data.client_message_id&&await tx.message.findFirst({where:{id:data.client_message_id},select:{id:true}}))throw new InputError('This delivery identifier is unavailable.');
     const policyExpiry=expiresAt(contact?.ttlSeconds||0),deadline=requestedExpiry&&policyExpiry?new Date(Math.min(requestedExpiry.getTime(),policyExpiry.getTime())):requestedExpiry??policyExpiry;
     if(deadline&&deadline.getTime()<=Date.now())throw new InputError('This message expired and cannot be sent.');
     const message=await tx.message.create({data:{senderId,recipientId,clientMessageId:data.client_message_id,ciphertext:data.ciphertext,iv:data.iv,expiresAt:deadline,deliveredAt:senderId!==recipientId&&online(recipientId)?new Date():null}});
@@ -68,14 +77,28 @@ export function v2Services({app,database,io,authenticate,erasingUsers,activeSend
   if(!initial)throw messageActionError('This message is unavailable or is not yours.',404);
   return tracked([userId,initial.recipientId],async()=>{
    const message=await database.$transaction(async tx=>{
-    const row=await tx.message.findFirst({where:{id:messageId,senderId:userId}});
+    // Lock deletion targets before inspecting the clock or metadata. A pending
+    // read/edit cannot change the row between eligibility and the atomic write.
+    const row=replacement
+     ?await tx.message.findFirst({where:{id:messageId,senderId:userId}})
+     :(await tx.$queryRaw<Prisma.MessageGetPayload<{}>[]>`SELECT * FROM "Message" WHERE "id"=${messageId} AND "senderId"=${userId} FOR UPDATE`)[0];
     if(!row)throw messageActionError('This message is unavailable or is not yours.',404);
     if(!replacement&&row.deletedAt)return row;
     if(row.deletedAt||row.expiresAt&&row.expiresAt.getTime()<=Date.now())throw messageActionError('This message expired or was deleted.',410);
     if(row.revision!==expectedRevision)throw messageActionError('This message changed. Refresh it before trying again.',409);
     if(replacement&&userId!==row.recipientId)await accepted(userId,row.recipientId,tx);
-    const changed=await tx.message.updateMany({where:{id:messageId,senderId:userId,revision:expectedRevision,deletedAt:null,AND:[liveWhere()]},data:replacement?{ciphertext:replacement.ciphertext,iv:replacement.iv,revision:{increment:1}}:{ciphertext:'',iv:'',deletedAt:new Date(),revision:{increment:1}}});
-    if(changed.count!==1)throw messageActionError('This message changed or expired. Refresh it before trying again.',409);
+    const changed=replacement
+     ?(await tx.message.updateMany({where:{id:messageId,senderId:userId,revision:expectedRevision,deletedAt:null,AND:[liveWhere()]},data:{ciphertext:replacement.ciphertext,iv:replacement.iv,revision:{increment:1}}})).count
+     :await tx.$executeRaw`UPDATE "Message" SET "ciphertext"='', "iv"='', "deletedAt"=(clock_timestamp() AT TIME ZONE 'UTC'), "revision"="revision"+1
+       WHERE "id"=${messageId} AND "senderId"=${userId} AND "revision"=${expectedRevision} AND "deletedAt" IS NULL
+       AND ("expiresAt" IS NULL OR "expiresAt">(clock_timestamp() AT TIME ZONE 'UTC')) AND ${messageDeletionWindow()}`;
+    if(changed!==1){
+     if(!replacement){
+      const [eligibility]=await tx.$queryRaw<{allowed:boolean}[]>`SELECT ${messageDeletionWindow()} AS "allowed" FROM "Message" WHERE "id"=${messageId} AND "senderId"=${userId}`;
+      if(eligibility&&!eligibility.allowed)throw messageActionError(DELETE_WINDOW_ERROR,403);
+     }
+     throw messageActionError('This message changed or expired. Refresh it before trying again.',409);
+    }
     if(!replacement)await tx.attachment.deleteMany({where:{messageId}});
     const updated=await tx.message.findUniqueOrThrow({where:{id:messageId}});
     if(updated.expiresAt&&updated.expiresAt.getTime()<=Date.now())throw messageActionError('This message expired.',410);
@@ -87,6 +110,25 @@ export function v2Services({app,database,io,authenticate,erasingUsers,activeSend
     if(message.recipientId!==userId)io.to(room(message.recipientId)).emit(event,message);
    }
    return {message};
+  });
+ }
+ async function markMessageRead(recipientId:string,messageId:string){
+  const initial=await database.message.findFirst({where:{id:messageId,recipientId,deletedAt:null,AND:[liveWhere()]},select:{senderId:true}});
+  if(!initial)return;
+  return tracked([recipientId,initial.senderId],async()=>{
+   await accepted(recipientId,initial.senderId);
+   // COALESCE is evaluated against the locked row, so retries and concurrent
+   // read receipts always return the original server-recorded read timestamp.
+   const [message]=await database.$queryRaw<{id:string;senderId:string;recipientId:string;readAt:Date}[]>`UPDATE "Message"
+    SET "readAt"=COALESCE("readAt",(clock_timestamp() AT TIME ZONE 'UTC')), "deliveredAt"=COALESCE("deliveredAt",(clock_timestamp() AT TIME ZONE 'UTC'))
+    WHERE "id"=${messageId} AND "recipientId"=${recipientId} AND "deletedAt" IS NULL
+    AND ("expiresAt" IS NULL OR "expiresAt">(clock_timestamp() AT TIME ZONE 'UTC'))
+    RETURNING "id","senderId","recipientId","readAt"`;
+   if(!message||erasingUsers.has(recipientId)||erasingUsers.has(message.senderId))return;
+   const receipt={message_id:message.id,status:'read' as const,at:message.readAt.toISOString()};
+   io.to(room(message.senderId)).emit('message:receipt',receipt);
+   if(message.senderId!==recipientId)io.to(room(recipientId)).emit('message:receipt',receipt);
+   return message;
   });
  }
  app.patch('/api/messages/:messageId',{preHandler:authenticate},async request=>{
@@ -157,5 +199,5 @@ export function v2Services({app,database,io,authenticate,erasingUsers,activeSend
  app.delete('/api/aliases/:username',{preHandler:authenticate},async request=>{await database.alias.deleteMany({where:{userId:request.principal.sub,username:username(object(request.params).username)}});return {ok:true};});
  async function cleanupExpired(){const now=new Date();const expired=await database.message.findMany({where:{expiresAt:{lte:now}},select:{id:true,senderId:true,recipientId:true},take:1000});if(expired.length){await database.message.deleteMany({where:{id:{in:expired.map(x=>x.id)},expiresAt:{lte:now}}});for(const row of expired){io.to(room(row.senderId)).emit('message:expired',{message_id:row.id});if(row.senderId!==row.recipientId)io.to(room(row.recipientId)).emit('message:expired',{message_id:row.id});}}await database.attachment.deleteMany({where:{OR:[{expiresAt:{lte:now}},{orphanExpiresAt:{lte:now}}]}});await database.invitation.deleteMany({where:{expiresAt:{lt:new Date(now.getTime()-7*86400000)}}});}
  const cleanupTimer=setInterval(()=>{void cleanupExpired().catch(()=>undefined);},30_000);cleanupTimer.unref();app.addHook('onClose',async()=>clearInterval(cleanupTimer));
- return {blocked,accepted,resolveUser,sendEncrypted,mutateMessage,cleanupExpired,tracked,ensureAvailable};
+ return {blocked,accepted,resolveUser,sendEncrypted,mutateMessage,markMessageRead,cleanupExpired,tracked,ensureAvailable};
 }

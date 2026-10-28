@@ -6,12 +6,11 @@
 .selected .bubble{box-shadow:0 0 0 2px #9bc5a7}
 .select{align-self:center;display:grid;place-items:center;width:23px;height:23px;flex-shrink:0;border:1px solid #729c7e;border-radius:50%;background:#17251c;color:#dcf7e5}
 .select[aria-checked=true]{background:#8bb99b;color:#102b1a;border-color:#b4ddc0}
-.actions{display:flex;align-items:center;gap:2px;position:absolute;right:5px;top:-13px;z-index:4;background:#25372b;border:1px solid #435d4c;padding:1px 2px;border-radius:7px;box-shadow:0 3px 10px #0003}
-.actions>button{width:26px;height:23px;display:grid;place-items:center;border-radius:4px;color:#a5c5b0}
-.actions>button:hover{background:#3b5544;color:#d8f2e1}
-.actions>button:focus-visible{outline:2px solid #c4ebd0;outline-offset:1px}
-.actions .quick{display:none}
-.row:hover .quick,.row:focus-within .quick{display:grid}
+.row .bubble.withMenu{padding-top:30px}
+.menuButton{position:absolute;top:0;left:2px;width:38px;height:28px;display:grid;place-items:center;padding:0;border:0;background:transparent;box-shadow:none;color:#9eb9a8;cursor:pointer;z-index:1;touch-action:manipulation}
+.menuButtonOwn{left:auto;right:2px}
+.menuButton:hover,.menuButton[aria-expanded=true]{color:#e1f5e7}
+.menuButton:focus-visible{outline:2px solid var(--mint,#c4ebd0);outline-offset:-3px;border-radius:5px}
 .swipeHint{position:absolute;left:0;top:50%;transform:translate(-9px,-50%);display:grid;place-items:center;width:30px;height:30px;background:#385d46;color:#c4ebcf;border-radius:50%;pointer-events:none;transition:opacity .1s}
 .swipeOwn{left:auto;right:0;transform:translate(9px,-50%)}
 .forwarded{display:flex;align-items:center;gap:5px;font-size:10px;line-height:1.5;color:#9bb5a5;margin:0 0 5px;font-style:italic}
@@ -26,5 +25,5 @@
 .quickReactions{display:flex;gap:3px;border-bottom:1px solid #3b5744;padding:3px 1px 9px;margin-bottom:3px}
 .quickReactions>button{flex:1;height:35px;display:grid;place-items:center;border-radius:8px;font-family:'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif;font-size:23px;line-height:1}
 .quickReactions>button:hover,.quickReactions>button:focus-visible{background:#37563f;outline:2px solid #91ba9d;outline-offset:-2px}
-@media(pointer:coarse){.bubble{-webkit-user-select:none;user-select:none}.actions{top:-11px}.actions>button{height:25px;width:28px}.row:hover .quick{display:none}.row:focus-within .quick{display:grid}}
+@media(pointer:coarse){.bubble{-webkit-user-select:none;user-select:none}}
 @media(prefers-reduced-motion:reduce){.bubble,.swipeHint{transition:none}}

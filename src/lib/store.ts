@@ -9,10 +9,11 @@ import {encryptAttachment,decryptAttachment,type AttachmentMeta,type AttachmentI
 import {normalizeSearchUsername,parseUserSearchResponse,type UserSearchResult} from './user-search';
 import {TypingLease} from './typing-state';
 import {isReactionEmoji} from './reaction-emoji';
+import {earliestReadAt,getMessageDeletionState} from './message-deletion';
 export type {UserSearchResult} from './user-search';
 export type {AttachmentMeta} from './chat-utils';
 export interface Conversation {id:string;username:string;name:string;initials:string;color:string;online:boolean;unread:number;pinned?:boolean;preview?:string;time?:string;isBot?:boolean;publicKeyJwk?:JsonWebKey;latestAt?:number;ttlSeconds?:number;verified?:boolean;blocked?:boolean;requestStatus?:'accepted'|'outgoing';keyChanged?:boolean}
-export interface ChatMessage {id:string;serverId?:string;text:string;at:number;own:boolean;status:'sending'|'sent'|'delivered'|'read'|'queued'|'failed';isBot?:boolean;replyTo?:{id:string;text:string;own:boolean};reactions?:Record<string,string[]>;attachment?:AttachmentMeta;expiresAt?:number;system?:boolean;edited?:boolean;editedAt?:number;forwarded?:boolean;deleted?:boolean;revision?:number}
+export interface ChatMessage {id:string;serverId?:string;text:string;at:number;own:boolean;status:'sending'|'sent'|'delivered'|'read'|'queued'|'failed';isBot?:boolean;replyTo?:{id:string;text:string;own:boolean};reactions?:Record<string,string[]>;attachment?:AttachmentMeta;expiresAt?:number;system?:boolean;edited?:boolean;editedAt?:number;forwarded?:boolean;deleted?:boolean;revision?:number;readAt?:number}
 export interface Preferences {aiEnabled:boolean;aiConsent:boolean;density:'comfortable'|'compact';accent:'mint'|'blue'|'violet';autoLockMinutes:0|5|15|30}
 export interface Invite {id:string;token:string;url:string;expiresAt:number;usedAt?:number;revokedAt?:number}
 export interface InvitePreview {token:string;username:string;publicKeyJwk:JsonWebKey;expiresAt:number}
@@ -38,11 +39,12 @@ let relationshipRevision=0;
 let hiddenMessages:Record<string,string[]>={},settingsWriteRevision=0;
 const mutationVersions=new Map<string,number>(),deletedMessages=new Set<string>();
 const incomingBindings=new Map<string,{peerId:string;senderId:string;serverId:string}>();
-const messageKey=(peerId:string,id:string)=>`${peerId}:${id}`;
+const liveReceipts=new Map<string,{status:'delivered'|'read';readAt?:number}>();
+const messageKey=(peerId:string,id:string,namespace:'logical'|'server'='logical')=>`${peerId}:${namespace}:${id}`;
 const isHidden=(peerId:string,id:string,serverId?:string)=>(hiddenMessages[peerId]??[]).some(value=>value===id||value===serverId);
-const isDeleted=(peerId:string,id:string,serverId?:string)=>deletedMessages.has(messageKey(peerId,id))||!!serverId&&deletedMessages.has(messageKey(peerId,serverId));
-const seenRevision=(peerId:string,id:string,serverId?:string)=>Math.max(mutationVersions.get(messageKey(peerId,id))??0,serverId?mutationVersions.get(messageKey(peerId,serverId))??0:0);
-function rememberRevision(peerId:string,id:string,revision:number,serverId?:string){mutationVersions.set(messageKey(peerId,id),revision);if(serverId)mutationVersions.set(messageKey(peerId,serverId),revision)}
+const isDeleted=(peerId:string,id:string,serverId?:string)=>deletedMessages.has(messageKey(peerId,id))||!!serverId&&deletedMessages.has(messageKey(peerId,serverId,'server'));
+const seenRevision=(peerId:string,id:string,serverId?:string)=>Math.max(mutationVersions.get(messageKey(peerId,id))??0,serverId?mutationVersions.get(messageKey(peerId,serverId,'server'))??0:0);
+function rememberRevision(peerId:string,id:string,revision:number,serverId?:string){mutationVersions.set(messageKey(peerId,id),revision);if(serverId)mutationVersions.set(messageKey(peerId,serverId,'server'),revision)}
 function validMessage(peerId:string,id:string,revision:number,serverId?:string){return !isHidden(peerId,id,serverId)&&!isDeleted(peerId,id,serverId)&&!messageExpired(id,serverId)&&seenRevision(peerId,id,serverId)<=revision}
 let botTyping=false;
 const peerTyping=new TypingLease(syncTyping);
@@ -67,22 +69,28 @@ async function restoreSettings(user:SessionUser){const generation=epoch;await op
 async function saveContact(c:Conversation,ownerId:string){const generation=epoch,version=peerVersion(c.id);if(!c.publicKeyJwk||tombstones.has(c.id))return;await openDb();if(!validPeer(generation,ownerId,c.id,version))return;await db.contacts.put({cacheId:`${ownerId}:${c.id}`,ownerId,peerId:c.id,username:c.username,publicKeyJwk:c.publicKeyJwk,ttlSeconds:c.ttlSeconds,blocked:c.blocked,requestStatus:c.requestStatus})}
 function messageExpired(id:string,serverId?:string){return expiredMessageIds.has(id)||!!serverId&&expiredMessageIds.has(serverId)}
 function earlierExpiry(...values:(number|undefined)[]){const finite=values.filter((value):value is number=>value!==undefined&&Number.isFinite(value));return finite.length?Math.min(...finite):undefined}
+function parsedReadAt(value:unknown){if(typeof value!=='string')return undefined;return earliestReadAt(Date.parse(value))}
+function receiptMetadata(status:ChatMessage['status'],readAt:number|undefined,...known:({status?:string;readAt?:number}|undefined)[]){
+ const first=earliestReadAt(readAt,...known.map(value=>value?.readAt));
+ return{status:first!==undefined||status==='read'||known.some(value=>value?.status==='read')?'read' as const:status==='delivered'||known.some(value=>value?.status==='delivered')?'delivered' as const:status,readAt:first};
+}
+function knownReceipt(peerId:string,id:string,serverId?:string){return useVeilnivo.getState().messages[peerId]?.find(message=>message.id===id||!!serverId&&message.serverId===serverId)}
 function withLatest(c:Conversation,messages:Record<string,ChatMessage[]>){const latest=messages[c.id]?.at(-1);return{...c,preview:latest?(latest.deleted?'Message deleted':latest.attachment?'Attachment: '+latest.attachment.name:latest.text):undefined,time:latest?time(latest.at):undefined,latestAt:latest?.at}}
-function append(peerId:string,message:ChatMessage,countUnread=true){if(tombstones.has(peerId)||isHidden(peerId,message.id,message.serverId)||messageExpired(message.id,message.serverId)||message.expiresAt&&message.expiresAt<=Date.now())return;useVeilnivo.setState(s=>({messages:{...s.messages,[peerId]:[...(s.messages[peerId]??[]).filter(m=>m.id!==message.id),message].sort((a,b)=>a.at-b.at||a.id.localeCompare(b.id))},conversations:s.conversations.map(c=>c.id===peerId?{...c,...(message.at>=(c.latestAt??0)?{preview:message.deleted?'Message deleted':message.attachment?`Attachment: ${message.attachment.name}`:message.text,time:time(message.at),latestAt:message.at}:{}),unread:message.own||s.activeId===peerId?0:c.unread+(countUnread&&!(s.messages[peerId]??[]).some(m=>m.id===message.id)?1:0)}:c).sort((a,b)=>Number(!!b.pinned)-Number(!!a.pinned)||(b.latestAt??0)-(a.latestAt??0))}));applyControls(peerId,message.id)}
-function updateMessage(peerId:string,id:string,value:Partial<ChatMessage>){useVeilnivo.setState(s=>({messages:{...s.messages,[peerId]:(s.messages[peerId]??[]).map(m=>m.id===id?{...m,...value}:m)}}))}
+function append(peerId:string,message:ChatMessage,countUnread=true){if(tombstones.has(peerId)||isHidden(peerId,message.id,message.serverId)||messageExpired(message.id,message.serverId)||message.expiresAt&&message.expiresAt<=Date.now())return;message={...message,...receiptMetadata(message.status,message.readAt,knownReceipt(peerId,message.id,message.serverId),message.serverId?liveReceipts.get(message.serverId):undefined)};useVeilnivo.setState(s=>({messages:{...s.messages,[peerId]:[...(s.messages[peerId]??[]).filter(m=>m.id!==message.id),message].sort((a,b)=>a.at-b.at||a.id.localeCompare(b.id))},conversations:s.conversations.map(c=>c.id===peerId?{...c,...(message.at>=(c.latestAt??0)?{preview:message.deleted?'Message deleted':message.attachment?`Attachment: ${message.attachment.name}`:message.text,time:time(message.at),latestAt:message.at}:{}),unread:message.own||s.activeId===peerId?0:c.unread+(countUnread&&!(s.messages[peerId]??[]).some(m=>m.id===message.id)?1:0)}:c).sort((a,b)=>Number(!!b.pinned)-Number(!!a.pinned)||(b.latestAt??0)-(a.latestAt??0))}));applyControls(peerId,message.id)}
+function updateMessage(peerId:string,id:string,value:Partial<ChatMessage>){useVeilnivo.setState(s=>({messages:{...s.messages,[peerId]:(s.messages[peerId]??[]).map(m=>m.id===id?{...m,...value,...receiptMetadata(value.status??m.status,value.readAt,m,m.serverId?liveReceipts.get(m.serverId):undefined)}:m)}}))}
 function applyControls(peerId:string,targetId:string){const s=useVeilnivo.getState(),target=s.messages[peerId]?.find(m=>m.id===targetId);if(!target||target.deleted)return;const reactions:Record<string,string[]>={};const events=[...(controls.get(peerId)?.values()??[])].filter(p=>p.targetId===targetId).sort((a,b)=>a.timestamp-b.timestamp||(a.id??'').localeCompare(b.id??''));for(const event of events){if(!event.emoji)continue;const actors=reactions[event.emoji]??[];reactions[event.emoji]=event.active?[...new Set([...actors,event.senderId])]:actors.filter(id=>id!==event.senderId)}updateMessage(peerId,targetId,{reactions:Object.fromEntries(Object.entries(reactions).filter(([,v])=>v.length))})}
-function applyPayload(peerId:string,p:Payload,id:string,status:ChatMessage['status']='sent',serverId?:string,countUnread=false,revision=0){const s=useVeilnivo.getState();if(tombstones.has(peerId)||!validMessage(peerId,id,revision,serverId)||p.expiresAt&&p.expiresAt<=Date.now())return;if(p.type==='reaction'){if(!p.targetId||!p.emoji||isDeleted(peerId,p.targetId))return;if(!controls.has(peerId))controls.set(peerId,new Map());controls.get(peerId)!.set(id,p);applyControls(peerId,p.targetId);return}append(peerId,{id,serverId,text:p.text,at:p.timestamp,own:p.senderId===s.user?.id,status,isBot:peerId===BOT&&p.senderId===BOT,replyTo:p.replyTo?{...p.replyTo,text:isDeleted(peerId,p.replyTo.id)?'This message was deleted':p.replyTo.text,own:p.senderId===s.user?.id?p.replyTo.own:!p.replyTo.own}:undefined,attachment:p.attachment,expiresAt:p.expiresAt,system:p.type==='system',edited:!!p.editedAt,editedAt:p.editedAt,forwarded:p.forwarded,revision},countUnread)}
+function applyPayload(peerId:string,p:Payload,id:string,status:ChatMessage['status']='sent',serverId?:string,countUnread=false,revision=0,readAt?:number){const s=useVeilnivo.getState();if(tombstones.has(peerId)||!validMessage(peerId,id,revision,serverId)||p.expiresAt&&p.expiresAt<=Date.now())return;if(p.type==='reaction'){if(!p.targetId||!p.emoji||isDeleted(peerId,p.targetId))return;if(!controls.has(peerId))controls.set(peerId,new Map());controls.get(peerId)!.set(id,p);applyControls(peerId,p.targetId);return}append(peerId,{id,serverId,text:p.text,at:p.timestamp,own:p.senderId===s.user?.id,status,isBot:peerId===BOT&&p.senderId===BOT,replyTo:p.replyTo?{...p.replyTo,text:isDeleted(peerId,p.replyTo.id)?'This message was deleted':p.replyTo.text,own:p.senderId===s.user?.id?p.replyTo.own:!p.replyTo.own}:undefined,attachment:p.attachment,expiresAt:p.expiresAt,system:p.type==='system',edited:!!p.editedAt,editedAt:p.editedAt,forwarded:p.forwarded,revision,readAt},countUnread)}
 function normalizedCachedMessage(row:CachedMessage){const prefix=row.ownerId+':';const logical=row.cacheId.startsWith(prefix)?row.cacheId.slice(prefix.length):row.id;return row.id!==logical&&row.serverId===row.id?{...row,id:logical}:row}
-async function cachePayload(peerId:string,p:Payload,id:string,envelope?:{ciphertext:string;iv:string},status:ChatMessage['status']='sent',serverId?:string,revision=0,eligibility?:()=>boolean){
+async function cachePayload(peerId:string,p:Payload,id:string,envelope?:{ciphertext:string;iv:string},status:ChatMessage['status']='sent',serverId?:string,revision=0,eligibility?:()=>boolean,readAt?:number){
  const s=useVeilnivo.getState(),generation=epoch,version=peerVersion(peerId);if(!s.user||eligibility&&!eligibility()||!validMessage(peerId,id,revision,serverId))return;
  const encrypted=envelope?{ciphertext:envelope.ciphertext,iv:envelope.iv}:await encryptPayload(p,await keyFor(peerId));
  const current=()=>validPeer(generation,s.user!.id,peerId,version)&&validMessage(peerId,id,revision,serverId)&&(!eligibility||eligibility());
  if(!current())return;await openDb();if(!current())return;
- const row:CachedMessage={cacheId:`${s.user.id}:${id}`,id,ownerId:s.user.id,peerId,...encrypted,createdAt:p.timestamp,expiresAt:p.expiresAt,status,serverId,attachmentId:p.attachment?.id,revision,senderId:peerId===BOT?s.user.id:p.senderId};
- await db.transaction('rw',db.messages,async()=>{if(current()){await db.messages.put(row);if(!current())throw new Error('This message changed before it could be cached.')}});if(!current()){if(eligibility)await discardUnqueuedPayload(row);return}return row;
+ const row:CachedMessage={cacheId:`${s.user.id}:${id}`,id,ownerId:s.user.id,peerId,...encrypted,createdAt:p.timestamp,expiresAt:p.expiresAt,status,serverId,attachmentId:p.attachment?.id,revision,readAt,senderId:peerId===BOT?s.user.id:p.senderId};
+ await db.transaction('rw',db.messages,async()=>{if(current()){const previous=await db.messages.get(row.cacheId);if(!current())return;Object.assign(row,receiptMetadata(status,readAt,previous,knownReceipt(peerId,id,serverId),serverId?liveReceipts.get(serverId):undefined));await db.messages.put(row);if(!current())throw new Error('This message changed before it could be cached.')}});if(!current()){if(eligibility)await discardUnqueuedPayload(row);return}return row;
 }
 function showDeleted(peerId:string,id:string,own:boolean,at:number,serverId:string|undefined,revision:number,expiresAt?:number){
- deletedMessages.add(messageKey(peerId,id));if(serverId)deletedMessages.add(messageKey(peerId,serverId));rememberRevision(peerId,id,revision,serverId);
+ deletedMessages.add(messageKey(peerId,id));if(serverId)deletedMessages.add(messageKey(peerId,serverId,'server'));rememberRevision(peerId,id,revision,serverId);
  const events=controls.get(peerId);if(events)for(const [controlId,p]of events)if(p.targetId===id)events.delete(controlId);
  append(peerId,{id,serverId,text:'',at,own,status:'sent',deleted:true,revision,expiresAt},false);
  useVeilnivo.setState(state=>({messages:{...state.messages,[peerId]:(state.messages[peerId]??[]).map(m=>m.replyTo?.id===id?{...m,replyTo:{...m.replyTo,text:'This message was deleted'}}:m)}}));
@@ -99,7 +107,7 @@ async function loadCache(){
   rememberRevision(row.peerId,row.id,revision,row.serverId);
   if(row.deletedAt){showDeleted(row.peerId,row.id,row.senderId===s.user.id,row.createdAt,row.serverId,revision,row.expiresAt);continue}
   if(isDeleted(row.peerId,row.id,row.serverId))continue;
-  try{const version=peerVersion(row.peerId),p=await decryptPayload<Payload>(row.ciphertext,row.iv,await keyFor(row.peerId));p.expiresAt=earlierExpiry(p.expiresAt,row.expiresAt);if(validPeer(generation,s.user.id,row.peerId,version)&&validMessage(row.peerId,row.id,revision,row.serverId))applyPayload(row.peerId,p,row.id,(row.status as ChatMessage['status'])??'sent',row.serverId,false,revision)}catch{}
+  try{const version=peerVersion(row.peerId),p=await decryptPayload<Payload>(row.ciphertext,row.iv,await keyFor(row.peerId));p.expiresAt=earlierExpiry(p.expiresAt,row.expiresAt);if(validPeer(generation,s.user.id,row.peerId,version)&&validMessage(row.peerId,row.id,revision,row.serverId))applyPayload(row.peerId,p,row.id,(row.status as ChatMessage['status'])??'sent',row.serverId,false,revision,row.readAt)}catch{}
  }
 }
 function botList(){return useVeilnivo.getState().preferences.aiEnabled?[{...bot}]:[]}
@@ -191,7 +199,10 @@ async function checkIncomingBinding(raw:WireMessage,peerId:string,candidateId:st
   boundId=m.id;
  }
  await openDb();if(!current())return undefined;
- const direct=await db.messages.get(`${ownerId}:${candidateId}`),byId=candidateId===raw.id?direct:await db.messages.get(`${ownerId}:${raw.id}`);
+ const direct=await db.messages.get(`${ownerId}:${candidateId}`),serverLookup=candidateId===raw.id?undefined:await db.messages.get(`${ownerId}:${raw.id}`);
+ // A server-ID fallback cannot claim a different message's logical nonce.
+ // Direct logical/canonical candidates retain their normal ownership checks.
+ const byId=serverLookup?.serverId===raw.id?serverLookup:undefined;
  let byServer:CachedMessage|undefined;
  if(!raw.clientMessageId&&!direct&&!byId)byServer=await db.messages.where('ownerId').equals(ownerId).filter(row=>row.serverId===raw.id).first();
  if(!current())return undefined;
@@ -216,6 +227,17 @@ async function receiveWire(raw:WireMessage,countUnread=true){
  if(tombstones.has(peerId)||isHidden(peerId,candidateId,raw.id)||messageExpired(candidateId,raw.id))return;
  const binding=await checkIncomingBinding(raw,peerId,candidateId,s.user.id,generation,version);
  if(!binding||!validPeer(generation,s.user.id,peerId,version))return;
+ const readAt=parsedReadAt(raw.readAt);if(raw.readAt!=null&&readAt===undefined)throw new Error('Invalid message read time.');
+ if(readAt!==undefined&&binding.boundId&&!isDeleted(peerId,binding.boundId,raw.id)){
+  const metadata=receiptMetadata('read',readAt,knownReceipt(peerId,binding.boundId,raw.id),liveReceipts.get(raw.id));liveReceipts.set(raw.id,{status:'read',readAt:metadata.readAt});
+  updateMessage(peerId,binding.boundId,metadata);
+  const cacheId=`${s.user.id}:${binding.boundId}`;await db.transaction('rw',db.messages,async()=>{
+   if(!validPeer(generation,s.user!.id,peerId,version))return;const previous=await db.messages.get(cacheId);
+   if(!validPeer(generation,s.user!.id,peerId,version)||!previous||previous.deletedAt||previous.peerId!==peerId||previous.serverId!==raw.id)return;
+   await db.messages.update(cacheId,receiptMetadata('read',readAt,previous,knownReceipt(peerId,binding.boundId!,raw.id),liveReceipts.get(raw.id)));
+  });
+  if(!validPeer(generation,s.user.id,peerId,version))return;
+ }
  if(binding.boundId&&revision<seenRevision(peerId,binding.boundId,raw.id))return;
  if(binding.boundId&&!raw.deletedAt)rememberRevision(peerId,binding.boundId,revision,raw.id);
  if(raw.deletedAt){
@@ -249,9 +271,10 @@ async function receiveWire(raw:WireMessage,countUnread=true){
  reserveIncomingBinding(id,peerId,raw);rememberRevision(peerId,id,revision,raw.id);
  if(raw.senderId!==s.user.id&&p.type!=='reaction')peerTyping.clear(peerId);
  if(raw.expiresAt){const expiry=new Date(raw.expiresAt).getTime();if(!Number.isFinite(expiry))throw new Error('Invalid message expiry.');p.expiresAt=earlierExpiry(p.expiresAt,expiry)}
- await cachePayload(peerId,p,id,raw,raw.readAt?'read':raw.deliveredAt?'delivered':'sent',raw.id,revision);
+ await cachePayload(peerId,p,id,raw,raw.readAt?'read':raw.deliveredAt?'delivered':'sent',raw.id,revision,undefined,readAt);
  if(!validPeer(generation,s.user.id,peerId,version)||!validMessage(peerId,id,revision,raw.id))return;
- applyPayload(peerId,p,id,raw.readAt?'read':raw.deliveredAt?'delivered':'sent',raw.id,countUnread,revision);
+ const cachedRead=await db.messages.get(`${s.user.id}:${id}`);if(!validPeer(generation,s.user.id,peerId,version)||!validMessage(peerId,id,revision,raw.id))return;
+ applyPayload(peerId,p,id,raw.readAt?'read':raw.deliveredAt?'delivered':'sent',raw.id,countUnread,revision,earliestReadAt(readAt,cachedRead?.readAt));
  if(s.activeId===peerId&&raw.senderId!==s.user.id)socket?.emit('message:read',{message_id:raw.id});
 }
 async function liveHistory(peerId:string){const s=useVeilnivo.getState(),generation=epoch,version=peerVersion(peerId);if(!s.user)return;let cursor:string|null=null;const seen=new Set<string>();do{const q=new URLSearchParams({limit:'500'});if(cursor)q.set('cursor',cursor);const result=await api<{messages:WireMessage[];next_cursor?:string|null}>(`/api/messages/${peerId===BOT?s.user.id:encodeURIComponent(peerId)}?${q}`,{signal:requests.signal});if(!validPeer(generation,s.user.id,peerId,version))return;for(const row of result.messages)await receiveWire(row,false);cursor=result.next_cursor??null;if(cursor&&seen.has(cursor))throw new Error('Repeated history cursor. Reconnect to restore history.');if(cursor)seen.add(cursor)}while(cursor&&validPeer(generation,s.user.id,peerId,version))}
@@ -259,7 +282,7 @@ async function refreshRequests(){const s=useVeilnivo.getState(),generation=epoch
 async function expireMessages(){const s=useVeilnivo.getState();if(!s.user)return;const current=Date.now();let changed=false;const messages=Object.fromEntries(Object.entries(s.messages).map(([id,items])=>{const kept=items.filter(m=>!m.expiresAt||m.expiresAt>current);if(kept.length!==items.length)changed=true;return[id,kept]}));for(const events of controls.values())for(const [id,p]of events)if(p.expiresAt&&p.expiresAt<=current)events.delete(id);if(changed)useVeilnivo.setState({messages,conversations:s.conversations.map(c=>{const latest=messages[c.id]?.at(-1);return{...c,preview:latest?(latest.deleted?'Message deleted':latest.attachment?'Attachment: '+latest.attachment.name:latest.text):undefined,time:latest?time(latest.at):undefined,latestAt:latest?.at}})});try{await openDb();await Promise.all([db.messages.where('expiresAt').belowOrEqual(current).delete(),db.outbox.where('expiresAt').belowOrEqual(current).delete(),db.attachments.where('expiresAt').belowOrEqual(current).delete()])}catch{}}
 function notifyLocal(ownerId?:string){channel?.postMessage({type:'refresh',ownerId})}
 function startServices(){cleanupServices?.();if(typeof window==='undefined')return;const activity=()=>{if(lockTimer)clearTimeout(lockTimer);const minutes=useVeilnivo.getState().preferences.autoLockMinutes;if(minutes)lockTimer=setTimeout(()=>void useVeilnivo.getState().logout(),minutes*60000)};let lockTimer:ReturnType<typeof setTimeout>|undefined;const online=()=>{useVeilnivo.setState({networkOnline:nowOnline()});if(nowOnline())void flushOutbox()};const timer=setInterval(()=>void expireMessages(),1000);window.addEventListener('online',online);window.addEventListener('offline',online);window.addEventListener('pointerdown',activity);window.addEventListener('keydown',activity);activity();cleanupServices=()=>{clearInterval(timer);if(lockTimer)clearTimeout(lockTimer);window.removeEventListener('online',online);window.removeEventListener('offline',online);window.removeEventListener('pointerdown',activity);window.removeEventListener('keydown',activity)};}
-function releaseKeys(){epoch++;aiRevision++;hiddenMessages={};mutationVersions.clear();deletedMessages.clear();incomingBindings.clear();botTyping=false;peerTyping.clear();activeBotController?.abort();activeBotController=null;requests.abort();requests=new AbortController();socket?.disconnect();socket=null;channel?.close();channel=null;cleanupServices?.();cleanupServices=null;privateKey=null;masterKey=null;peerKeys.clear();sharedKeys.clear();tombstones.clear();controls.clear();expiredMessageIds.clear();peerVersions.clear();erasedPeers.clear();relationshipRevision++;liveSyncRevision++;liveSyncReady=false;setExpectedAccountId(null);verified={};knownKeys={};flushing=false}
+function releaseKeys(){epoch++;aiRevision++;hiddenMessages={};mutationVersions.clear();deletedMessages.clear();incomingBindings.clear();liveReceipts.clear();botTyping=false;peerTyping.clear();activeBotController?.abort();activeBotController=null;requests.abort();requests=new AbortController();socket?.disconnect();socket=null;channel?.close();channel=null;cleanupServices?.();cleanupServices=null;privateKey=null;masterKey=null;peerKeys.clear();sharedKeys.clear();tombstones.clear();controls.clear();expiredMessageIds.clear();peerVersions.clear();erasedPeers.clear();relationshipRevision++;liveSyncRevision++;liveSyncReady=false;setExpectedAccountId(null);verified={};knownKeys={};flushing=false}
 function resetState(){useVeilnivo.setState({user:null,conversations:[],messages:{},activeId:'',typing:false,connected:false,ready:true,busy:false,messageRequests:[],blockedContacts:[],lastInvite:null,aliases:[],preferences:{...defaults}})}
 function localConnection(){if(typeof BroadcastChannel==='undefined')return;channel=new BroadcastChannel(CLIENT_EVENT_CHANNEL);channel.onmessage=e=>{const s=useVeilnivo.getState();if(e.data?.type==='erase-all'){releaseKeys();db.close();resetState();useVeilnivo.setState({erasure:{local:'cleared',server:'not-applicable'}});return}if(e.data?.type==='refresh'&&s.user&&(!e.data.ownerId||e.data.ownerId===s.user.id))void localContacts(true).catch(error=>useVeilnivo.setState({error:err(error)}))}}
 function liveConnection(){
@@ -272,7 +295,21 @@ function liveConnection(){
  connection.on('message:receive',(raw:WireMessage)=>{if(current())void receiveWire(raw).catch(failed)});
  connection.on('message:updated',(raw:WireMessage)=>{if(current())void receiveWire(raw,false).catch(failed)});
  connection.on('message:deleted',(raw:WireMessage)=>{if(current())void receiveWire(raw,false).catch(failed)});
- connection.on('message:receipt',({message_id,status}:{message_id:string;status:'delivered'|'read'})=>{if(!current())return;for(const [peerId,rows]of Object.entries(useVeilnivo.getState().messages)){const m=rows.find(m=>m.serverId===message_id||m.id===message_id);if(m)updateMessage(peerId,m.id,{status})}});
+ connection.on('message:receipt',({message_id,status,at}:{message_id:string;status:'delivered'|'read';at?:string})=>{
+  if(!current()||typeof message_id!=='string'||message_id.length>128||!['delivered','read'].includes(status))return;
+  const previous=liveReceipts.get(message_id),metadata=receiptMetadata(status,status==='read'?parsedReadAt(at):undefined,previous);
+  liveReceipts.set(message_id,metadata as {status:'delivered'|'read';readAt?:number});if(liveReceipts.size>4096)liveReceipts.delete(liveReceipts.keys().next().value!);
+  for(const [peerId,rows]of Object.entries(useVeilnivo.getState().messages)){
+   const message=rows.find(m=>m.serverId===message_id);if(!message||message.deleted)continue;
+   updateMessage(peerId,message.id,metadata);
+   const version=peerVersion(peerId),ownerId=userId!,cacheId=`${ownerId}:${message.id}`;
+   void(async()=>{await openDb();await db.transaction('rw',db.messages,async()=>{
+    if(!current()||!validPeer(connectionEpoch,ownerId,peerId,version))return;
+    const row=await db.messages.get(cacheId);if(!current()||!validPeer(connectionEpoch,ownerId,peerId,version)||!row||row.deletedAt||row.peerId!==peerId||row.serverId!==message_id)return;
+    await db.messages.update(cacheId,receiptMetadata(metadata.status,metadata.readAt,row,knownReceipt(peerId,message.id,message_id),liveReceipts.get(message_id)));
+   })})().catch(failed);
+  }
+ });
  connection.on('message:expired',({message_id}:{message_id:string})=>{if(current()&&typeof message_id==='string')void purgeExpiredMessage(message_id).catch(failed)});
  connection.on('typing:receive',({user_id,typing}:{user_id:string;typing:boolean})=>{if(!current()||typeof user_id!=='string'||typeof typing!=='boolean')return;if(!typing){peerTyping.clear(user_id);return}const s=useVeilnivo.getState(),c=s.conversations.find(c=>c.id===user_id);if(s.activeId===user_id&&s.connected&&s.networkOnline&&c?.online&&!c.isBot&&!c.blocked&&c.requestStatus!=='outgoing'&&!tombstones.has(user_id))peerTyping.pulse(user_id)});
  connection.on('presence:update',({user_id,online}:{user_id:string;online:boolean})=>{if(!current()||typeof user_id!=='string'||typeof online!=='boolean')return;if(!online)peerTyping.clear(user_id);useVeilnivo.setState(s=>({conversations:s.conversations.map(c=>c.id===user_id?{...c,online}:c)}))});
@@ -292,15 +329,17 @@ async function deliverWire(row:CachedMessage){
  if(result.error)throw new Error(result.error);if(!result.message)throw new Error('The server did not confirm delivery.');
  const confirmed=result.message,serverExpiry=confirmed.expiresAt?new Date(confirmed.expiresAt).getTime():undefined;
  if(serverExpiry!==undefined&&!Number.isFinite(serverExpiry))throw new Error('The server returned an invalid message expiry.');
+ const readAt=parsedReadAt(confirmed.readAt);if(confirmed.readAt!=null&&readAt===undefined)throw new Error('The server returned an invalid message read time.');
  const expiresAt=earlierExpiry(row.expiresAt,serverExpiry),status=confirmed.readAt?'read':confirmed.deliveredAt?'delivered':'sent';
  if(isHidden(row.peerId,row.id,confirmed.id)||isDeleted(row.peerId,row.id,confirmed.id))return;
  if(messageExpired(row.id,confirmed.id)||expiresAt!==undefined&&expiresAt<=Date.now()){expiredMessageIds.add(confirmed.id);await purgeExpiredMessage(row.id);return}
  await db.transaction('rw',db.outbox,db.messages,db.attachments,async()=>{
   if(!validPeer(generation,s.user!.id,row.peerId,version)||messageExpired(row.id,confirmed.id))return;
-  await db.outbox.delete(row.cacheId);await db.messages.update(row.cacheId,{status,serverId:confirmed.id,expiresAt});
+  const previous=await db.messages.get(row.cacheId);if(!validPeer(generation,s.user!.id,row.peerId,version))return;
+  await db.outbox.delete(row.cacheId);await db.messages.update(row.cacheId,{...receiptMetadata(status,readAt,previous,knownReceipt(row.peerId,row.id,confirmed.id),liveReceipts.get(confirmed.id)),serverId:confirmed.id,expiresAt});
   if(row.attachmentId){const attachment=await db.attachments.get(row.attachmentId);if(attachment)await db.attachments.update(row.attachmentId,{expiresAt:earlierExpiry(attachment.expiresAt,expiresAt)})}
  });
- if(validPeer(generation,s.user.id,row.peerId,version)&&!messageExpired(row.id,confirmed.id))updateMessage(row.peerId,row.id,{status,serverId:confirmed.id,expiresAt});
+ if(validPeer(generation,s.user.id,row.peerId,version)&&!messageExpired(row.id,confirmed.id))updateMessage(row.peerId,row.id,{...receiptMetadata(status,readAt,liveReceipts.get(confirmed.id)),serverId:confirmed.id,expiresAt});
 }
 function aiAllowed(generation:number,userId:string,revision:number){const current=useVeilnivo.getState();return valid(generation,userId)&&revision===aiRevision&&current.preferences.aiEnabled&&current.preferences.aiConsent}
 async function pauseBotOutbox(ownerId:string){await openDb();const rows=await db.outbox.where('[ownerId+peerId]').equals([ownerId,BOT]).toArray();await db.transaction('rw',db.outbox,db.messages,async()=>{for(const row of rows){await db.outbox.update(row.cacheId,{paused:true,status:'failed'});await db.messages.update(row.cacheId,{status:'failed'});updateMessage(BOT,row.id,{status:'failed'})}})}
@@ -350,13 +389,14 @@ async function localMutation(peerId:string,message:ChatMessage,payload:Payload|u
  await openDb();await db.transaction('rw',db.messages,db.outbox,db.attachments,async()=>{
   if(!validPeer(generation,s.user!.id,peerId,version))throw new Error('This message session changed.');
   const own=await db.messages.get(`${s.user!.id}:${message.id}`);if(!own||(own.revision??0)!==(message.revision??0)||own.deletedAt)throw new Error('This message changed. Select it again.');
+  if(!payload){const eligibility=getMessageDeletionState({...message,...receiptMetadata(message.status,message.readAt,own)});if(!eligibility.allowed)throw new Error(eligibility.reason);}
   const rows=await db.messages.filter(row=>row.id===message.id&&((row.ownerId===s.user!.id&&row.peerId===peerId)||(row.ownerId===peerId&&row.peerId===s.user!.id))).toArray();
   for(const row of rows){await db.messages.put({...row,...envelope,revision,senderId:s.user!.id,...(!payload?{deletedAt:Date.now(),attachmentId:undefined}:{})});await db.outbox.delete(row.cacheId)}
   if(!payload&&message.attachment)await db.attachments.delete(message.attachment.id);
  });
  if(!validPeer(generation,s.user.id,peerId,version))return;
  rememberRevision(peerId,message.id,revision,message.serverId);
- if(payload)applyPayload(peerId,payload,message.id,message.status,message.serverId,false,revision);else showDeleted(peerId,message.id,true,message.at,message.serverId,revision,message.expiresAt);
+ if(payload)applyPayload(peerId,payload,message.id,message.status,message.serverId,false,revision,message.readAt);else showDeleted(peerId,message.id,true,message.at,message.serverId,revision,message.expiresAt);
  notifyLocal(peerId);
 }
 async function editSelectedMessage(id:string,text:string){
@@ -385,7 +425,7 @@ async function deleteSelectedMessages(ids:string[],scope:'me'|'everyone'){
  const selected=[...new Set(ids)];let completed=0;useVeilnivo.setState({busy:true,error:null});
  try{
   if(!selected.length||selected.length>50||!['me','everyone'].includes(scope))throw new Error('Select between 1 and 50 messages.');
-  const messages=selected.map(id=>scope==='everyone'?requireStableOwn(peerId,id):actionSource(peerId,id));
+  const messages=selected.map(id=>{const message=scope==='everyone'?requireStableOwn(peerId,id):actionSource(peerId,id);if(scope==='everyone'){const state=getMessageDeletionState(message);if(!state.allowed)throw new Error(state.reason)}return message;});
   if(scope==='me'){
    const before=hiddenMessages;hiddenMessages={...hiddenMessages,[peerId]:[...new Set([...(hiddenMessages[peerId]??[]),...messages.flatMap(m=>[m.id,...(m.serverId?[m.serverId]:[])])])]};
    try{await saveSettings()}catch(error){if(valid(generation,s.user.id))hiddenMessages=before;throw error}
@@ -396,7 +436,7 @@ async function deleteSelectedMessages(ids:string[],scope:'me'|'everyone'){
   }
   for(const message of messages){
    if(!validPeer(generation,s.user.id,peerId,version))throw new Error('This message session changed.');
-   requireStableOwn(peerId,message.id);
+   const latest=requireStableOwn(peerId,message.id),deletion=getMessageDeletionState(latest);if(!deletion.allowed)throw new Error(deletion.reason);
    if(s.mode==='live'){const result=await api<{message:WireMessage}>(`/api/messages/${encodeURIComponent(message.serverId!)}`,{method:'DELETE',signal:requests.signal,body:JSON.stringify({expected_revision:message.revision??0})});if(!validPeer(generation,s.user.id,peerId,version))return false;await receiveWire(result.message,false)}
    else await localMutation(peerId,message,undefined);
    completed++;

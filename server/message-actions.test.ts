@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {randomBytes,randomUUID} from 'node:crypto';
 import type {Socket} from 'socket.io-client';
 import {SESSION_COOKIE_NAME} from '../src/lib/compat';
-import {deliveryExpiry,mutationRevision,pair} from './v2';
+import {deliveryExpiry,mutationRevision,pair,messageDeletionWindow} from './v2';
 
 test('mutation revisions and explicit expiry reject malformed or expired operations',()=>{
  for(const value of [0,1,1000])assert.equal(mutationRevision(value),value);
@@ -18,7 +18,7 @@ function once<T>(socket:Socket,name:string):Promise<T>{return new Promise((resol
 
 // This creates and erases only generated accounts in an isolated migrated DB.
 test('SQL message actions enforce ownership, CAS, durable deletion and expiry',{skip:!process.env.TEST_DATABASE_URL,timeout:60000},async t=>{
- const {PrismaClient}=await import('@prisma/client'),{buildServer}=await import('./index'),{io:connectSocket}=await import('socket.io-client');
+ const {PrismaClient,Prisma}=await import('@prisma/client'),{buildServer}=await import('./index'),{io:connectSocket}=await import('socket.io-client');
  const database=new PrismaClient({datasources:{db:{url:process.env.TEST_DATABASE_URL}}}),origin='http://localhost:3000';
  const {app}=await buildServer({...process.env,DATABASE_URL:process.env.TEST_DATABASE_URL,JWT_SECRET:randomBytes(48).toString('base64url'),CLIENT_ORIGIN:origin,NODE_ENV:'test'},database);
  const accounts:{id:string;cookie:string}[]=[],sockets:Socket[]=[];
@@ -38,6 +38,89 @@ test('SQL message actions enforce ownership, CAS, durable deletion and expiry',{
    const body={recipient_id:bob.id,client_message_id:randomUUID(),...encrypted(),...extras};
    const response=await sender.timeout(5000).emitWithAck('message:send',body);assert.ok(response.message?.id,JSON.stringify(response));return{body,message:response.message};
   }
+
+  await t.test('the PostgreSQL deletion predicate excludes the exact first-read cutoff',async()=>{
+   const at=new Date('2030-01-01T12:00:00.000Z');
+   for(const [readAt,expected]of [[null,true],[new Date(at.getTime()-1_800_000+1),true],[new Date(at.getTime()-1_800_000),false],[new Date(at.getTime()-1_800_000-1),false]] as const){
+    const [result]=await database.$queryRaw<{allowed:boolean}[]>`SELECT ${messageDeletionWindow(Prisma.sql`${at.toISOString()}::timestamp`)} AS "allowed" FROM (SELECT ${readAt?.toISOString()??null}::timestamp AS "readAt") AS candidate`;
+    assert.equal(result.allowed,expected,readAt?.toISOString()??'Unread');
+   }
+  });
+
+  await t.test('the database deletion clock stays UTC in non-UTC database sessions',async()=>{
+   for(const zone of ['Pacific/Auckland','America/New_York'])await database.$transaction(async tx=>{
+    await tx.$queryRaw`SELECT set_config('TimeZone',${zone},true)`;
+    for(const [age,expected]of [[29*60_000,true],[31*60_000,false]] as const){
+     // Prisma persists UTC values in timestamp columns. Raw Date parameters
+     // bind as timestamptz, so use ISO text to model the stored naive UTC value.
+     const readAt=new Date(Date.now()-age).toISOString();
+     const [result]=await tx.$queryRaw<{allowed:boolean}[]>`SELECT ${messageDeletionWindow()} AS "allowed" FROM (SELECT ${readAt}::timestamp AS "readAt") AS candidate`;
+     assert.equal(result.allowed,expected,zone);
+    }
+   });
+  });
+
+  await t.test('deletion is allowed while unread and inside the first-read window, then forbidden',async()=>{
+   const unread=await send();assert.equal(unread.message.readAt,null);
+   const unreadDeletion=await app.inject({method:'DELETE',url:`/api/messages/${unread.message.id}`,headers:headers(),payload:{expected_revision:0}});assert.equal(unreadDeletion.statusCode,200,unreadDeletion.body);
+   const inside=await send();
+   await database.message.update({where:{id:inside.message.id},data:{readAt:new Date(Date.now()-1_800_000+10_000)}});
+   const insideDeletion=await app.inject({method:'DELETE',url:`/api/messages/${inside.message.id}`,headers:headers(),payload:{expected_revision:0}});assert.equal(insideDeletion.statusCode,200,insideDeletion.body);
+   for(const extraAge of [0,60_000]){
+    const closed=await send();
+    await database.$executeRaw`UPDATE "Message" SET "readAt"=(clock_timestamp() AT TIME ZONE 'UTC')-INTERVAL '30 minutes'-${extraAge}*INTERVAL '1 millisecond' WHERE "id"=${closed.message.id}`;
+    const denied=await app.inject({method:'DELETE',url:`/api/messages/${closed.message.id}`,headers:headers(),payload:{expected_revision:0,read_at:new Date().toISOString(),at:new Date().toISOString()}});
+    assert.equal(denied.statusCode,403,denied.body);assert.match(denied.json().error,/30 minutes.*first read/i);
+    const saved=await database.message.findUniqueOrThrow({where:{id:closed.message.id}});assert.equal(saved.deletedAt,null);assert.equal(saved.revision,0);assert.equal(saved.ciphertext,closed.body.ciphertext);
+   }
+  });
+
+  await t.test('read retries retain the first server timestamp and edits never restart the deletion window',async()=>{
+   const original=await send(),started=Date.now();
+   const senderReceipt=once<any>(sender,'message:receipt'),recipientReceipt=once<any>(recipient,'message:receipt');
+   recipient.emit('message:read',{message_id:original.message.id,at:'2000-01-01T00:00:00.000Z'});
+   const [first,mirrored]=await Promise.all([senderReceipt,recipientReceipt]);
+   const firstRow=await database.message.findUniqueOrThrow({where:{id:original.message.id}});assert.ok(firstRow.readAt);assert.ok(firstRow.readAt.getTime()>=started);assert.equal(first.at,firstRow.readAt.toISOString());assert.equal(mirrored.at,first.at);
+   const retry=once<any>(sender,'message:receipt');recipient.emit('message:read',{message_id:original.message.id});assert.equal((await retry).at,first.at);
+   assert.equal((await database.message.findUniqueOrThrow({where:{id:original.message.id}})).readAt?.toISOString(),first.at);
+   const closedAt=new Date(Date.now()-1_860_000);await database.message.update({where:{id:original.message.id},data:{readAt:closedAt}});
+   const afterDeadline=once<any>(sender,'message:receipt');recipient.emit('message:read',{message_id:original.message.id});assert.equal((await afterDeadline).at,closedAt.toISOString());
+   const edited=await app.inject({method:'PATCH',url:`/api/messages/${original.message.id}`,headers:headers(),payload:{...encrypted(),expected_revision:0}});assert.equal(edited.statusCode,200,edited.body);assert.equal(edited.json().message.readAt,closedAt.toISOString());
+   assert.equal((await database.message.findUniqueOrThrow({where:{id:original.message.id}})).readAt?.toISOString(),closedAt.toISOString());
+   const denied=await app.inject({method:'DELETE',url:`/api/messages/${original.message.id}`,headers:headers(),payload:{expected_revision:1}});assert.equal(denied.statusCode,403,denied.body);
+  });
+
+  await t.test('concurrent first-read retries return one immutable timestamp',async()=>{
+   const original=await send(),values:any[]=[];
+   let resolve!:(value:void)=>void;const received=new Promise<void>(done=>resolve=done);
+   const listener=(receipt:any)=>{if(receipt.message_id===original.message.id){values.push(receipt);if(values.length===2)resolve()}};
+   sender.on('message:receipt',listener);
+   try{
+    recipient.emit('message:read',{message_id:original.message.id});recipient.emit('message:read',{message_id:original.message.id});
+    await Promise.race([received,new Promise((_,reject)=>{const timer=setTimeout(()=>reject(new Error('Missing concurrent receipts')),5000);received.finally(()=>clearTimeout(timer))})]);
+    const saved=await database.message.findUniqueOrThrow({where:{id:original.message.id}});assert.ok(saved.readAt);assert.equal(values[0].at,saved.readAt.toISOString());assert.equal(values[1].at,values[0].at);
+   }finally{sender.off('message:receipt',listener)}
+  });
+
+  await t.test('a deletion waiting for a read-row lock rechecks the committed first-read cutoff',async()=>{
+   const original=await send();let release!:()=>void,entered!:()=>void;
+   const locked=new Promise<void>(done=>entered=done),resume=new Promise<void>(done=>release=done);
+   const holder=database.$transaction(async tx=>{
+    await tx.$queryRaw`SELECT "id" FROM "Message" WHERE "id"=${original.message.id} FOR UPDATE`;
+    entered();await resume;
+    await tx.$executeRaw`UPDATE "Message" SET "readAt"=(clock_timestamp() AT TIME ZONE 'UTC')-INTERVAL '30 minutes' WHERE "id"=${original.message.id}`;
+   });
+   await locked;const pending=app.inject({method:'DELETE',url:`/api/messages/${original.message.id}`,headers:headers(),payload:{expected_revision:0}});
+   try{
+    let waiting=false;
+    for(let attempt=0;attempt<100;attempt++){
+     const [activity]=await database.$queryRaw<{waiting:boolean}[]>`SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE pid<>pg_backend_pid() AND wait_event_type='Lock' AND query LIKE 'SELECT * FROM "Message"%FOR UPDATE%') AS waiting`;
+     if(activity.waiting){waiting=true;break}await new Promise(resolve=>setTimeout(resolve,10));
+    }
+    assert.ok(waiting,'Deletion must wait for the locked message row');
+   }finally{release();await holder}
+   const denied=await pending;assert.equal(denied.statusCode,403,denied.body);assert.equal((await database.message.findUniqueOrThrow({where:{id:original.message.id}})).deletedAt,null);
+  });
 
   await t.test('only the author can replace an encrypted snapshot and stale revisions lose',async()=>{
    const original=await send(),replacement=encrypted();
@@ -103,6 +186,19 @@ test('SQL message actions enforce ownership, CAS, durable deletion and expiry',{
    const crossPeer=await attacker.timeout(5000).emitWithAck('message:send',{recipient_id:alice.id,client_message_id:original.body.client_message_id,...encrypted()});assert.ok(crossPeer.error);
    assert.equal(await database.sendNonce.count({where:{clientMessageId:original.body.client_message_id}}),1);
    assert.equal(await database.message.count({where:{clientMessageId:original.body.client_message_id}}),1);
+  });
+
+  await t.test('new delivery nonces cannot alias an existing server record UUID',async()=>{
+   const original=await send();
+   const replay=await sender.timeout(5000).emitWithAck('message:send',original.body);assert.equal(replay.message?.id,original.message.id);assert.equal(replay.replayed,true);
+   const ownAlias=await sender.timeout(5000).emitWithAck('message:send',{recipient_id:bob.id,client_message_id:original.message.id,...encrypted()});assert.ok(ownAlias.error);
+   const oppositeAlias=await recipient.timeout(5000).emitWithAck('message:send',{recipient_id:alice.id,client_message_id:original.message.id,...encrypted()});assert.ok(oppositeAlias.error);
+   assert.equal(await database.message.count({where:{clientMessageId:original.message.id}}),0);
+   assert.equal(await database.sendNonce.count({where:{clientMessageId:original.message.id}}),0);
+   assert.equal((await database.message.findUniqueOrThrow({where:{id:original.message.id}})).ciphertext,original.body.ciphertext);
+   await database.message.update({where:{id:original.message.id},data:{clientMessageId:original.message.id}});
+   await database.sendNonce.update({where:{senderId_clientMessageId:{senderId:alice.id,clientMessageId:original.body.client_message_id}},data:{clientMessageId:original.message.id}});
+   const legacyReplay=await sender.timeout(5000).emitWithAck('message:send',{...original.body,client_message_id:original.message.id});assert.equal(legacyReplay.message?.id,original.message.id);assert.equal(legacyReplay.replayed,true,'An already-valid nonce replay must return before the new-delivery alias check');
   });
 
   await t.test('concurrent opposite-direction delivery UUID reuse has exactly one winner',async()=>{
