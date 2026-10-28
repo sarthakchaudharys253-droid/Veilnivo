@@ -10,7 +10,7 @@ A dark, two-pane encrypted messenger built with Next.js App Router, TypeScript, 
 - Message requests, explicit acceptance/decline, blocking and unblocking. No public username directory.
 - Exact username and alias search with a result preview before sending a request. Existing connections open a chat; incoming requests open the review screen. Search is authenticated, rate limited, and hides blocked identities.
 - Message selection, editing, forwarding, replies, encrypted emoji reactions, local message/file-name search, explicit send states and an encrypted, idempotent outbox.
-- A phone chat keyboard with letters, numbers, symbols, shift/caps lock, cursor controls, emoji and send. The chat composer suppresses the native phone keyboard; desktop typing remains available.
+- Standard chat typing with your phone's keyboard or laptop keyboard, alongside the searchable emoji picker.
 - Searchable native emoji picker with all 3,944 Unicode 17 emoji, nine categories, skin-tone and mixed-tone variants, and session-only recent emoji. It loads when opened and inserts at the cursor without replacing the rest of a draft. Emoji designs follow the device font.
 - Off / 1 hour / 24 hours / 7 days message timers. New messages use the selected timer; existing messages retain theirs.
 - Files up to 10 MiB, each encrypted with its own random AES-GCM key. Keys, filenames and MIME metadata travel only inside encrypted messages. User-triggered downloads use short-lived object URLs.
@@ -41,7 +41,7 @@ Delete for me hides the message on the current device and clears its local cache
 
 Forwarding creates a fresh encrypted message for each recipient, with a Forwarded marker and no source identity. Files receive fresh encryption keys and attachment IDs. The forwarded copy expires at the earlier of the original message's expiry and the destination conversation's timer.
 
-On phones, touching the chat composer opens the Veilnivo keyboard. It uses an English QWERTY layout with numbers and symbols, including ₹; it does not provide operating-system dictation, autocorrect or multilingual input methods. The emoji button opens the searchable emoji picker. Hide the keyboard with its down-arrow control.
+Touch the chat composer to type with your phone's normal keyboard, or use your laptop keyboard. Paste and input methods use the browser's standard text field behavior. The emoji button still opens the searchable emoji picker. The earlier website keyboard has been removed at the user's request.
 
 ## Production backend
 

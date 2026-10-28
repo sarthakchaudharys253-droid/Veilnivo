@@ -34,7 +34,7 @@ Avoid promises that expiration or erasure retracts copies, screenshots, exported
 9. Never send unencrypted message text, file data, encryption keys, public-key comparisons, or contact graphs to analytics. The initial market test should use explicit opt-in feedback, aggregated operational counts, and honest consent.
 10. Editing and deleting for everyone require the authenticated original sender and the expected message revision. Edits preserve routing, attachment identity and expiry. Deletion clears ciphertext and IV, removes attached encrypted files, and retains only a content-free synchronization record and replay-prevention nonce. Older events, acknowledgements and cached copies must not restore removed content.
 11. Delete for me is a device-local hide operation. Its hidden-message IDs are stored in encrypted local settings; it does not erase another participant's copy or the server message. Forwarding re-encrypts each recipient's copy and every attachment with fresh attachment keys and IDs, without extending the original expiry. Neither operation recalls screenshots, exports or existing downloads.
-12. Message identity is bound to its authenticated owner, conversation and server record before applying revisions, deletion records or decrypted payload IDs. A different sender cannot reuse a delivery nonce to alias another message. Asynchronous edit, forward, hide and keyboard callbacks must stop acting after an account or conversation change.
+12. Message identity is bound to its authenticated owner, conversation and server record before applying revisions, deletion records or decrypted payload IDs. A different sender cannot reuse a delivery nonce to alias another message. Asynchronous edit, forward, hide and composer callbacks must stop acting after an account or conversation change.
 
 ## Protocol upgrade: explicit amendment, not a silent patch
 
@@ -80,4 +80,4 @@ The optional Netlify/Render transport keeps HTTP authentication in Secure, HttpO
 
 These implementation fixes are covered by regression and real PostgreSQL integration checks. They do not change the documented cryptographic protocol or establish an independent audit claim.
 
-The phone chat keyboard runs within the website and does not change message encryption or authentication. The composer is read-only to the native phone keyboard, with website keys applying bounded, Unicode-aware text operations. Password and other account forms continue to use normal browser inputs.
+The chat composer uses a normal editable browser text field and the device's phone or laptop keyboard. The website keyboard and its native-input suppression have been removed. This input change does not change message encryption or authentication. Password and other account forms also continue to use normal browser inputs.

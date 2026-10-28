@@ -71,6 +71,12 @@ The separate local runner retains its application database and stable session se
 - PASS: An independent recipient WebCrypto client verified the edited snapshot and revision, deletion row with blank ciphertext/IV, reply target, emoji payload and keyboard message. It also verified the forwarded text and file, fresh attachment ID/key, expiry no later than the original, and successful decryption of the synthetic note.
 - PASS: Exactly three generated QA identities were erased through their own account-bound sessions. Existing user identities were not modified. The browser returned to a clean sign-in page and its temporary viewport was reset. Screenshots are `outputs/Veilnivo-message-actions.jpg` and `outputs/Veilnivo-phone-keyboard.jpg`.
 
+## Standard keyboard restoration - 28 October 2026
+
+- PASS: Removed the website keyboard, phone-composer read-only/input-mode suppression, custom paste/key interception and the unused keyboard helper/component. The composer is a normal editable textarea for phone and laptop input; Enter still sends, Shift+Enter inserts a newline, and composition confirmation does not send unfinished IME text.
+- PASS: All 11 focused emoji insertion, typing lifecycle, message gesture and message-action tests passed. The production webpack build completed successfully, including TypeScript validation. Its validated Netlify ZIP contains 50 static files (489,034 bytes), including the API rewrite and security headers.
+- Publication and public native-input checks are pending. No backend change or database migration is required.
+
 ## Remaining limits
 
 Public checks used one browser and independent Node WebCrypto clients. Two-browser/device interoperability, actual phone touch gestures, operating-system keyboard behavior, multilingual input methods, public Delete for me persistence, and backend restart/cold-start lifecycle behavior remain unverified publicly. Automated and local coverage is recorded separately above and below. GitHub Actions execution has not been verified, although the workflow is included. Paid billing and live AI are inactive. An independent cryptographic/security audit and a reviewed forward-secrecy protocol remain outside the implemented scope; [SECURITY.md](SECURITY.md) describes the current protocol accurately.
