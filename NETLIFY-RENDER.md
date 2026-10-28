@@ -10,16 +10,18 @@ The free beta is deployed at [veilnivo.netlify.app](https://veilnivo.netlify.app
 | Public backend | https://veilnivo-api-free.onrender.com |
 | Source | https://github.com/sarthakchaudharys253-droid/Veilnivo |
 | Backend source commit | `3cfcbbf362c1fc630aa77b32d39494fea7016a18` |
-| Frontend source commit | `391bf4946860b2c99e2799a61bff473ea708ecec` |
+| Frontend source commit | `6735e22f6e9ab53546242834b8054370cbef3008` |
 | Render workspace | My Workspace, `tea-dbfikelg1s2s73fvboag` |
 | Render Blueprint | `veilnivo-netlify-free` |
 | Render web service | `veilnivo-api-free`, `srv-dbg80dmc6qcc73ekou90` |
 | Verified Live backend deploy | `dep-dbgqrm7f3r2c73aeq40g` at `2026-10-28T08:12:52.121906Z` |
 | Render database | `veilnivo-db-free`, `dpg-dbg7spl9fdbs73d1ms7g-a` |
-| Published Netlify deploy | `6ae1b7762c51778be3d981c8`, 28 October 2026, 2:21 PM IST |
+| Published Netlify deploy | `6ae1bb25ed27a8fe12f124e2`, 28 October 2026, 2:36 PM IST |
 | Database expiry | **26 November 2026, 4:05 PM IST** (`2026-11-26T10:35:18.553914Z`) |
 
 Both Render resources use Free plans in Singapore. The existing database was associated with the Blueprint, preserving that resource. Later documentation/build-helper updates do not change the source commit recorded for the verified release above.
+
+The latest frontend update compacts the phone Messages heading, search and tabs from 179px to 132px and removes the lower sidebar invitation card. User lookup and invitations remain accessible from the header controls. Desktop control styling and native keyboard input are unchanged; no backend deployment or database migration was needed.
 
 The current Render service was created from a public repository URL, which requires a manual deploy of the latest `main` commit. Its auto-deploy setting alone does not establish a connected Git provider. Check for an existing deployment before triggering one; connecting a Git provider separately can enable automatic deploys. The existing Netlify project uses manual Drop uploads and is not linked to Git. Frontend changes require a local rebuild and upload to the same Netlify project unless Git-based Netlify deployment is configured separately. Reuse these resources; do not create a second project or database for routine updates.
 

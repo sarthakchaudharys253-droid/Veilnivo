@@ -79,6 +79,14 @@ The separate local runner retains its application database and stable session se
 - PASS: The public laptop-sized browser accepted sequential key input and Shift+Enter produced a newline. At a 375 by 812 viewport, the composer remained editable (`readOnly=false`, no `inputmode` override), accepted text and inserted a rocket emoji while preserving the draft. No website keyboard was present. The screenshot is `outputs/Veilnivo-native-keyboard-restored.jpg`; this desktop browser check does not simulate an actual phone's OS keyboard.
 - PASS: No message or AI prompt was sent during this input check. The single generated QA identity was removed through its own account-bound session. The browser returned to a clean sign-in screen and its temporary viewport was reset.
 
+## Compact mobile sidebar - 28 October 2026
+
+- PASS: The production webpack build and TypeScript validation completed. The validated Netlify ZIP contains 50 static files (488,962 bytes), preserving the API rewrite and security headers. This is a scoped presentation change; no backend code or migration changed.
+- PASS: Frontend source `6735e22f6e9ab53546242834b8054370cbef3008` was published as Netlify deployment `6ae1bb25ed27a8fe12f124e2` on 28 October at 2:36 PM IST.
+- PASS: At a 375 by 812 public browser viewport, the Messages heading/search/tabs block measured 132px versus 179px before the change (47px, about 26% shorter). The title row is 48px, search 40px and tabs 40px with a 4px gap. Heading action buttons retain 44px targets; search text is 16px and the phone shortcut hint is hidden. There was no horizontal overflow.
+- PASS: The lower invitation card is absent. Local conversation search/filter controls work, and user lookup and the header invitation dialog still open. The compact CSS is scoped to widths at or below 700px.
+- PASS: One generated QA identity was removed through its own account-bound session. No message or AI prompt was sent; existing accounts/messages were untouched. The temporary viewport override was reset and the browser returned to a clean sign-in page. Screenshots are `outputs/Veilnivo-sidebar-before.jpg` and `outputs/Veilnivo-sidebar-compact.jpg`.
+
 ## Remaining limits
 
 Public checks used one browser and independent Node WebCrypto clients. Two-browser/device interoperability, actual phone touch gestures, operating-system keyboard behavior, multilingual input methods, public Delete for me persistence, and backend restart/cold-start lifecycle behavior remain unverified publicly. Automated and local coverage is recorded separately above and below. GitHub Actions execution has not been verified, although the workflow is included. Paid billing and live AI are inactive. An independent cryptographic/security audit and a reviewed forward-secrecy protocol remain outside the implemented scope; [SECURITY.md](SECURITY.md) describes the current protocol accurately.
