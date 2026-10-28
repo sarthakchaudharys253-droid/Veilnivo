@@ -1,6 +1,6 @@
 # Netlify frontend and free Render backend
 
-The free beta is deployed at [veilnivo.netlify.app](https://veilnivo.netlify.app/) with its [Render backend](https://veilnivo-api-free.onrender.com/api/ready) and PostgreSQL connected. Public checks on 27 October 2026 passed sign-in, exact username search, connection requests, bidirectional encrypted messaging between a browser and an independent Node WebCrypto client, and decryption of saved PostgreSQL-backed history. The two generated QA identities were erased using their own account-bound sessions; existing user identities were not modified. See [VERIFICATION.md](VERIFICATION.md) for the precise scope.
+The free beta is deployed at [veilnivo.netlify.app](https://veilnivo.netlify.app/) with its [Render backend](https://veilnivo-api-free.onrender.com/api/ready) and PostgreSQL connected. The 28 October 2026 release adds message actions and the phone chat keyboard. Public checks covered editing, replies, emoji reactions, selection, encrypted text/file forwarding, sender deletion through the API, keyboard-authored delivery and browser sign-in recovery. Exactly three generated QA identities were erased through their own account-bound sessions; existing user identities were not modified. See [VERIFICATION.md](VERIFICATION.md) for the precise scope and earlier messaging checks.
 
 ## Current deployment record
 
@@ -9,21 +9,21 @@ The free beta is deployed at [veilnivo.netlify.app](https://veilnivo.netlify.app
 | Public frontend | https://veilnivo.netlify.app/ |
 | Public backend | https://veilnivo-api-free.onrender.com |
 | Source | https://github.com/sarthakchaudharys253-droid/Veilnivo |
-| Backend source commit | `1f59409a1787ae41e5c3b0f742d9caf44b1a3885` |
-| Frontend source commit | `20c1483eba7f24e5f1a63837b42d981cc554ee26` |
+| Backend source commit | `3cfcbbf362c1fc630aa77b32d39494fea7016a18` |
+| Frontend source commit | `3cfcbbf362c1fc630aa77b32d39494fea7016a18` |
 | Render workspace | My Workspace, `tea-dbfikelg1s2s73fvboag` |
 | Render Blueprint | `veilnivo-netlify-free` |
 | Render web service | `veilnivo-api-free`, `srv-dbg80dmc6qcc73ekou90` |
-| Verified Live backend deploy | `dep-dbgbfrcipgvc73f3aa00` |
+| Verified Live backend deploy | `dep-dbgqrm7f3r2c73aeq40g` at `2026-10-28T08:12:52.121906Z` |
 | Render database | `veilnivo-db-free`, `dpg-dbg7spl9fdbs73d1ms7g-a` |
-| Published Netlify deploy | `6ae0be0421774fa585bafe7f` |
+| Published Netlify deploy | `6ae1aeb09637aa48d2817c8f`, 28 October 2026, 1:43 PM IST |
 | Database expiry | **26 November 2026, 4:05 PM IST** (`2026-11-26T10:35:18.553914Z`) |
 
 Both Render resources use Free plans in Singapore. The existing database was associated with the Blueprint, preserving that resource. Later documentation/build-helper updates do not change the source commit recorded for the verified release above.
 
 The current Render service was created from a public repository URL, which requires a manual deploy of the latest `main` commit. Its auto-deploy setting alone does not establish a connected Git provider. Check for an existing deployment before triggering one; connecting a Git provider separately can enable automatic deploys. The existing Netlify project uses manual Drop uploads and is not linked to Git. Frontend changes require a local rebuild and upload to the same Netlify project unless Git-based Netlify deployment is configured separately. Reuse these resources; do not create a second project or database for routine updates.
 
-The message-actions update adds sender-authorized edits/deletion, encrypted forwarding, message selection/replies/reactions, touch swipe replies, double-click reactions and the phone chat keyboard. Its additive migration, `202610280000_message_actions`, adds revision/deletion metadata and a nonce lookup index; it does not reset accounts or history. Deploy the backend and let its committed migration complete before publishing the matching frontend. Refresh existing browser tabs afterward so they load the updated client. Local checks passed; public release evidence must be recorded separately in [VERIFICATION.md](VERIFICATION.md) before treating this update as deployed.
+The message-actions update adds sender-authorized edits/deletion, encrypted forwarding, message selection/replies/reactions, touch swipe replies, double-click reactions and the phone chat keyboard. Its additive migration, `202610280000_message_actions`, adds revision/deletion metadata and a nonce lookup index; it does not reset accounts or history. Render logs confirmed that migration succeeded before the matching frontend was published. For future coordinated updates, deploy the backend and complete its committed migrations first. Refresh existing browser tabs so they load the updated client. The production webpack build and public acceptance checks passed; their scope is recorded in [VERIFICATION.md](VERIFICATION.md).
 
 ## Render resources
 
@@ -75,8 +75,8 @@ The current database expires on **26 November 2026 at 4:05 PM IST**. Export data
 
 ## Acceptance checks
 
-The completed public smoke check used one browser and an independent Node WebCrypto client. It covered readiness, strict host-only HttpOnly cookies, sign-in, exact username search, request acceptance, direct cookie-free Render WebSockets, encrypted messages in both directions, and saved-history decryption. Only the two generated QA identities were erased afterward. The final browser view returned to the empty sign-in page.
+Public checks used one browser and independent Node WebCrypto clients. They covered readiness, strict host-only HttpOnly cookies, sign-in, exact username search, request acceptance, direct cookie-free Render WebSockets, encrypted messages in both directions and saved-history decryption. The 28 October checks also covered edits, replies, full-picker reactions, two-message selection/forwarding, attachment download and re-encryption, an own synthetic deletion through the sender API, website keyboard input/send and browser lock/sign-in history recovery. Forwarded files used fresh IDs/keys, preserved the original expiry limit and decrypted successfully. All generated QA identities were removed through their own sessions, and the browser returned to the empty sign-in page.
 
-Further public acceptance checks remain: two separate browsers/devices, alias search, attachment delivery, lock/sign-in history recovery in the browser, blocking, reconnect after a backend restart and cold start, and source/local-ZIP access restrictions. Automated/local coverage for these features is recorded separately in [VERIFICATION.md](VERIFICATION.md). Repeat the relevant checks after deployment changes and remove only generated QA identities.
+Further public acceptance checks remain: two separate browsers/devices, actual phone touch gestures and operating-system keyboard behavior, multilingual input methods, Delete for me persistence, alias search, blocking, reconnect after a backend restart and cold start, and source/local-ZIP access restrictions. The public browser checked deletion-dialog options and Cancel; actual deletion used the independent sender API. Automated/local coverage for these features is recorded separately in [VERIFICATION.md](VERIFICATION.md). Repeat the relevant checks after deployment changes and remove only generated QA identities.
 
 Existing local-preview accounts, server accounts, encrypted browser caches and Netlify browser storage do not move automatically to the new deployment. Preserve the local database and credentials until any intended migration has been verified.
