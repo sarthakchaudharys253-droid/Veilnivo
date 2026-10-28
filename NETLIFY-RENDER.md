@@ -1,6 +1,6 @@
 # Netlify frontend and free Render backend
 
-The free beta is deployed at [veilnivo.netlify.app](https://veilnivo.netlify.app/) with its [Render backend](https://veilnivo-api-free.onrender.com/api/ready) and PostgreSQL connected. The 28 October 2026 message-actions release passed public checks for editing, replies, emoji reactions, selection, encrypted text/file forwarding, sender deletion through the API, keyboard-authored delivery and browser sign-in recovery. Exactly three generated QA identities were erased through their own account-bound sessions; existing user identities were not modified. A subsequent frontend update, published at 2:21 PM IST, restores normal phone/laptop keyboard typing and removes the website keyboard. Its public browser checks passed standard text entry, multiline input and emoji insertion with an editable composer at laptop and phone sizes. See [VERIFICATION.md](VERIFICATION.md) for the precise scope and earlier messaging checks.
+The free beta is deployed at [veilnivo.netlify.app](https://veilnivo.netlify.app/) with its [Render backend](https://veilnivo-api-free.onrender.com/api/ready) and PostgreSQL connected. The latest 28 October 2026 release places unboxed message dots inside each bubble, makes Edit message explicit, and limits Delete for everyone to unread messages or the first 30 minutes after recipient read. Public checks passed editing after read, immutable read timestamps, deletion within the window through the sender API, replies, reactions, encrypted forwarding and sign-in recovery. Exactly three generated QA identities were removed through their own sessions; existing user data was untouched. Normal device-keyboard typing and the compact sidebar remain. See [VERIFICATION.md](VERIFICATION.md) for the precise scope and earlier checks.
 
 ## Current deployment record
 
@@ -9,19 +9,21 @@ The free beta is deployed at [veilnivo.netlify.app](https://veilnivo.netlify.app
 | Public frontend | https://veilnivo.netlify.app/ |
 | Public backend | https://veilnivo-api-free.onrender.com |
 | Source | https://github.com/sarthakchaudharys253-droid/Veilnivo |
-| Backend source commit | `3cfcbbf362c1fc630aa77b32d39494fea7016a18` |
-| Frontend source commit | `6735e22f6e9ab53546242834b8054370cbef3008` |
+| Backend source commit | `5e1e33584cb30dc03122e913c6f6c45dfed1d57f` |
+| Frontend source commit | `5e1e33584cb30dc03122e913c6f6c45dfed1d57f` |
 | Render workspace | My Workspace, `tea-dbfikelg1s2s73fvboag` |
 | Render Blueprint | `veilnivo-netlify-free` |
 | Render web service | `veilnivo-api-free`, `srv-dbg80dmc6qcc73ekou90` |
-| Verified Live backend deploy | `dep-dbgqrm7f3r2c73aeq40g` at `2026-10-28T08:12:52.121906Z` |
+| Verified Live backend deploy | `dep-dbh007utlv9c73dhbgmg` at `2026-10-28T14:02:54.981545Z` |
 | Render database | `veilnivo-db-free`, `dpg-dbg7spl9fdbs73d1ms7g-a` |
-| Published Netlify deploy | `6ae1bb25ed27a8fe12f124e2`, 28 October 2026, 2:36 PM IST |
+| Published Netlify deploy | `6ae200a4522297e6e24b19fb`, 28 October 2026, 7:33 PM IST |
 | Database expiry | **26 November 2026, 4:05 PM IST** (`2026-11-26T10:35:18.553914Z`) |
 
 Both Render resources use Free plans in Singapore. The existing database was associated with the Blueprint, preserving that resource. Later documentation/build-helper updates do not change the source commit recorded for the verified release above.
 
-The latest frontend update compacts the phone Messages heading, search and tabs from 179px to 132px and removes the lower sidebar invitation card. User lookup and invitations remain accessible from the header controls. Desktop control styling and native keyboard input are unchanged; no backend deployment or database migration was needed.
+The compact-sidebar frontend update reduced the phone Messages heading, search and tabs from 179px to 132px and removed the lower sidebar invitation card. User lookup and invitations remain accessible from the header controls. Desktop control styling and native keyboard input were unchanged; no backend deployment or database migration was needed.
+
+The coordinated update at source `5e1e33584cb30dc03122e913c6f6c45dfed1d57f` puts dots at the top right of own bubbles and top left of received bubbles. The first-read deletion deadline is enforced by the server; repeated reads and edits do not restart it, and editing remains available after deletion closes. All 139 regression tests and the production build passed. The existing Render service reached Live as `dep-dbh007utlv9c73dhbgmg` at `2026-10-28T14:02:54.981545Z` (28 October, 7:32:54 PM IST), followed by the matching Netlify publication at 7:33 PM IST. Public checks confirmed the corner controls, edit/read-time preservation, within-window API deletion and recovery. The exact elapsed cutoff was tested against isolated PostgreSQL rather than by waiting 30 minutes publicly. This update needed no new database migration.
 
 The current Render service was created from a public repository URL, which requires a manual deploy of the latest `main` commit. Its auto-deploy setting alone does not establish a connected Git provider. Check for an existing deployment before triggering one; connecting a Git provider separately can enable automatic deploys. The existing Netlify project uses manual Drop uploads and is not linked to Git. Frontend changes require a local rebuild and upload to the same Netlify project unless Git-based Netlify deployment is configured separately. Reuse these resources; do not create a second project or database for routine updates.
 
