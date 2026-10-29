@@ -17,7 +17,7 @@ A dark, two-pane encrypted messenger built with Next.js App Router, TypeScript, 
 - Off / 1 hour / 24 hours / 7 days message timers. New messages use the selected timer; existing messages retain theirs.
 - Files up to 10 MiB, each encrypted with its own random AES-GCM key. Keys, filenames and MIME metadata travel only inside encrypted messages. User-triggered downloads use short-lived object URLs.
 - Identity verification bound to the current public-key fingerprint, with key-change warnings.
-- Optional Veil AI with first-use consent. Peer conversation history is not included automatically.
+- A normal Veil AI chat with first-use consent and a Powered by Ollama label. Ollama Cloud is selected but inactive; no live AI has been enabled. Peer conversation history is not included automatically.
 - Readable comfortable/compact layouts, mint/blue/violet accents, optional inactivity lock, and up to three additional aliases pointing to the same identity.
 - Separate local/server erasure states. One header erase control; Ctrl+Shift+Backspace opens the same confirmation.
 - Free/Plus pricing experiment and explicit inactive billing. Feedback can be exported locally, with no automatic submission or analytics.
@@ -51,7 +51,7 @@ On a phone, press and hold a chat to enter selection mode, then tap other chats 
 
 Chat organization is saved in the account's encrypted browser settings on this device. Clear/delete actions also remove the affected local cached messages, attachments and queued sends, and retain local clear markers so old server history does not return on an ordinary reload. They do not delete the server's encrypted message records or another participant's data, and organization does not synchronize to another device.
 
-Set a secret code in Settings → Chat lock, confirm it, and choose conversations to lock. A code can contain 4–12 Unicode characters, counted as grapheme clusters so a joined emoji counts as one. Letters, numbers, symbols, spaces and emoji work; the code is checked exactly, without trimming or normalization. Send the code to Veil AI to open the locked section. When a code is configured and the section is closed, Veil AI submissions are treated as local unlock attempts before any assistant consent, history, outbox or provider request. Local unlocking stays available even when the assistant is off.
+Set a secret code in Settings → Chat lock, confirm it, and choose conversations to lock. A code can contain 4–12 Unicode characters, counted as grapheme clusters so a joined emoji counts as one. Letters, numbers, symbols, spaces and emoji work; the code is checked exactly, without trimming or normalization. Only sending the exact configured code to Veil AI opens the locked section locally. That matching code never enters assistant history, the outbox or a provider request, and local unlocking works even when AI or consent is off. Other input follows the normal assistant path and its consent and availability checks; it is not treated as a failed unlock attempt.
 
 Leaving the locked section, backgrounding the page, or locking/signing out of the account closes it. Locked conversation names and previews stay out of the ordinary chat list and search. Chat lock is a local interface guard inside an already unlocked account, not a separate message-encryption identity or a new server-side protection boundary.
 
@@ -79,7 +79,9 @@ For separate local frontend/API processes, see [server/README.md](server/README.
 
 The older hosted Sites preview remains a separate static demonstration with browser-local data. The Netlify site above uses the live Render backend. Browser-local identities/history are not uploaded automatically. Cloudflare Workers and Vercel functions need separate backend adapters; Supabase can supply external PostgreSQL without replacing this backend. Optional deployment templates do not provision additional hosting resources by themselves.
 
-AI remains disabled server-side until provider credentials/model and an operator-confirmed zero-retention agreement are configured. The provider necessarily reads live prompts. No claim of model-provider end-to-end encryption is made.
+Veil AI keeps a normal question-and-answer interface. Ollama Cloud is selected with `AI_PROVIDER=ollama` but inactive with `OLLAMA_CLOUD_ENABLED=false`; `OLLAMA_API_KEY` and `OLLAMA_MODEL` remain empty server-only placeholders. A saved key alone never activates cloud inference. Live provider status reports the inactive state, and the client rejects ordinary prompts before adding history or outbox entries or requesting a completion. The exact chat-lock code still opens locked chats locally.
+
+Ollama Cloud uses [metered pricing](https://ollama.com/pricing); this release enables no live AI or billing. Future activation requires an explicit cloud enable flag plus a server-side API key and model, and user consent before sending a prompt. The provider necessarily reads those prompts over TLS; encrypted saved history does not make provider requests end-to-end encrypted. The legacy OpenAI-compatible option separately requires `BOT_ZERO_RETENTION_CONFIRMED=true`, an operator attestation rather than a technical retention guarantee. No PC worker or local Ollama bridge is part of this configuration.
 
 ## Security and honest limits
 

@@ -16,6 +16,7 @@ import { Server as SocketServer } from "socket.io";
 import { webcrypto } from "node:crypto";
 import { v2Services, clientMessageId, deliveryExpiry, liveWhere } from "./v2";
 import {groupServices} from './groups';
+import {createAiProvider,AiProviderError,type AiProviderSession} from './ai-provider';
 
 import { InputError, base64, envelope, id, object, registration, username, encodeHistoryCursor, parseHistoryCursor } from "./validation";
 
@@ -39,6 +40,7 @@ export async function buildServer(env: NodeJS.ProcessEnv = process.env, database
     allowRequest:(request, callback) => callback(null, request.headers.origin === origin),
     transports:["websocket"],
   });
+  const aiProvider=createAiProvider(env);
   await app.register(cookie);
   await app.register(cors, {origin, credentials:true, methods:["GET","POST","PUT","PATCH","DELETE"], allowedHeaders:["Content-Type","X-Veilnivo-Account"]});
   await app.register(jwt, {secret:env.JWT_SECRET, cookie:{cookieName:COOKIE,signed:false}});
@@ -124,7 +126,7 @@ export async function buildServer(env: NodeJS.ProcessEnv = process.env, database
     for (const peer of peers) io.to(room(peer)).emit("presence:update",{user_id:userId,online:isOnline});
   }
 
-  app.get("/api/health", {config:{rateLimit:false}}, async () => ({ok:true, mode:"production", bot_configured:!!env.BOT_API_KEY && env.BOT_ZERO_RETENTION_CONFIRMED === "true"}));
+  app.get("/api/health", {config:{rateLimit:false}}, async () => ({ok:true, mode:"production", bot_configured:aiProvider.status().configured}));
   app.get("/api/ready", {config:{rateLimit:false}}, async (_request, reply) => {
     try {
       if (shuttingDown) throw new Error();
@@ -213,37 +215,32 @@ export async function buildServer(env: NodeJS.ProcessEnv = process.env, database
     const result=await v2.sendEncrypted(request.principal.sub,{...data,client_message_id:clientMessageId(body.client_message_id)});
     return reply.code(result.replayed?200:201).send(result);
   });
-  app.post("/api/bot/completion", {preHandler:authenticate,config:{rateLimit:{max:20,timeWindow:"1 minute"}}}, async (request,reply) => {
-    if (!env.BOT_API_KEY || !env.BOT_MODEL || env.BOT_ZERO_RETENTION_CONFIRMED !== "true") return reply.code(503).send({error:"The assistant is not configured with a verified zero-retention provider."});
-    const data = object(request.body);
-    if (typeof data.prompt !== "string" || !data.prompt.trim() || data.prompt.length > 32_000) throw new InputError("Enter a prompt of up to 32,000 characters.");
-    const endpoint = new URL(env.BOT_API_URL || "https://api.openai.com/v1/chat/completions");
-    if (endpoint.protocol !== "https:") return reply.code(503).send({error:"The assistant provider must use HTTPS."});
-    if (erasingUsers.has(request.principal.sub)) return reply.code(409).send({error:"Account erasure is in progress."});
-    const abort = new AbortController();
-    const requests = botRequests.get(request.principal.sub) || new Set<AbortController>();
-    requests.add(abort);
-    botRequests.set(request.principal.sub,requests);
-    const timer = setTimeout(() => abort.abort(),60_000);
-    request.raw.on("aborted",() => abort.abort());
-    try {
-      // Prompt exists only in this request and the provider call. Never log or persist it.
-      const upstream = await fetch(endpoint,{method:"POST",headers:{Authorization:`Bearer ${env.BOT_API_KEY}`,"Content-Type":"application/json"},body:JSON.stringify({model:env.BOT_MODEL,stream:true,store:false,messages:[{role:"system",content:"You are Veilnivo's concise, helpful privacy assistant. Never claim that a provider is end-to-end encrypted or that erasure removes recipient screenshots."},{role:"user",content:data.prompt}]}),signal:abort.signal});
-      if (!upstream.ok || !upstream.body) return reply.code(502).send({error:"The assistant provider is unavailable."});
-      reply.hijack();
-      reply.raw.writeHead(200,{"Content-Type":"text/event-stream; charset=utf-8","Cache-Control":"no-store","X-Accel-Buffering":"no","Access-Control-Allow-Origin":origin,"Access-Control-Allow-Credentials":"true"});
-      const reader = upstream.body.getReader();
-      reply.raw.on("close",() => {abort.abort(); void reader.cancel().catch(() => undefined);});
-      try {
-        while (true) {
-          const {done,value} = await reader.read();
-          if (done) break;
-          if (!reply.raw.write(Buffer.from(value))) await new Promise<void>((resolve) => reply.raw.once("drain",resolve));
-        }
-      } catch { /* Connection cancellation never logs prompts or response fragments. */ }
-      finally { reader.releaseLock(); reply.raw.end(); }
-    } catch { if (!reply.raw.headersSent) return reply.code(502).send({error:"The assistant provider is unavailable."}); }
-    finally { clearTimeout(timer); requests.delete(abort); if (!requests.size) botRequests.delete(request.principal.sub); }
+  app.get('/api/bot/status',{preHandler:authenticate},async()=>aiProvider.status());
+  app.post('/api/bot/completion',{preHandler:authenticate,config:{rateLimit:{max:20,timeWindow:'1 minute'}}},async(request,reply)=>{
+    const data=object(request.body);
+    if(typeof data.prompt!=='string'||!data.prompt.trim()||data.prompt.length>32_000)throw new InputError('Enter a question of up to 32,000 characters.');
+    const userId=request.principal.sub;
+    if(erasingUsers.has(userId))return reply.code(409).send({error:'Account erasure is in progress.'});
+    const abort=new AbortController(),pending=botRequests.get(userId)||new Set<AbortController>();
+    pending.add(abort);botRequests.set(userId,pending);
+    let timedOut=false,session:AiProviderSession|undefined;
+    const timer=setTimeout(()=>{timedOut=true;abort.abort()},90_000);
+    const cancel=()=>abort.abort();request.raw.once('aborted',cancel);reply.raw.once('close',cancel);
+    const write=async(value:string)=>{if(reply.raw.destroyed||abort.signal.aborted)throw new DOMException('Cancelled.','AbortError');if(reply.raw.write(value))return;await new Promise<void>(resolve=>{const finish=()=>{reply.raw.off('drain',finish);reply.raw.off('close',finish);abort.signal.removeEventListener('abort',finish);resolve()};reply.raw.once('drain',finish);reply.raw.once('close',finish);abort.signal.addEventListener('abort',finish,{once:true});if(abort.signal.aborted||reply.raw.destroyed)finish()})};
+    try{
+      // Only this explicit question reaches the worker/provider. Never log it.
+      session=await aiProvider.open(data.prompt,abort.signal);
+      if(abort.signal.aborted||erasingUsers.has(userId))throw new AiProviderError('The AI request was cancelled.',409);
+      reply.hijack();reply.raw.writeHead(200,{'Content-Type':'text/event-stream; charset=utf-8','Cache-Control':'no-store','X-Accel-Buffering':'no','Access-Control-Allow-Origin':origin,'Access-Control-Allow-Credentials':'true'});
+      for await(const token of session.tokens)await write('data: '+JSON.stringify({choices:[{delta:{content:token}}]})+'\n\n');
+      await write('data: [DONE]\n\n');
+    }catch(error){
+      const failure=timedOut?new AiProviderError('The AI response timed out. Please try again.',504):error instanceof AiProviderError?error:new AiProviderError('The AI response was interrupted. Please retry.',502);
+      if(!reply.raw.headersSent&&!reply.raw.destroyed){if(failure.retryAfter)reply.header('Retry-After',String(failure.retryAfter));return reply.code(failure.statusCode===499?503:failure.statusCode).send({error:failure.message})}
+      if(reply.raw.headersSent&&!reply.raw.destroyed&&!abort.signal.aborted)reply.raw.write('data: '+JSON.stringify({error:failure.message})+'\n\n');
+    }finally{
+      clearTimeout(timer);request.raw.off('aborted',cancel);reply.raw.off('close',cancel);session?.release();await session?.cancel();if(reply.raw.headersSent&&!reply.raw.writableEnded&&!reply.raw.destroyed)reply.raw.end();pending.delete(abort);if(!pending.size)botRequests.delete(userId);
+    }
   });
 
   app.post("/api/account/nuke", {preHandler:authenticate}, async (request,reply) => {

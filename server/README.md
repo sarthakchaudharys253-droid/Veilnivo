@@ -1,6 +1,6 @@
 # Production backend
 
-Veilnivo's hosted Site preview uses a local demonstration. This server supplies the actual PostgreSQL and Socket.io transport. Its database contains wrapped private keys and opaque message envelopes only. An AI prompt is sent over TLS to the configured provider; the provider necessarily sees that prompt. The bot transport is not end-to-end encrypted to an AI model.
+Veilnivo's hosted Site preview uses a local demonstration. This server supplies the actual PostgreSQL and Socket.io transport. Its database contains wrapped private keys and opaque message envelopes only. Ollama Cloud is selected but inactive. If activated later, an AI prompt is sent over TLS to the configured provider, which necessarily sees that prompt. The bot transport is not end-to-end encrypted to an AI model.
 
 For the production container, provider setup, secrets, HTTPS origin, and acceptance checks, follow [DEPLOYMENT.md](../DEPLOYMENT.md). The included Dockerfile serves the built frontend and backend on one origin. Deploy one application replica; preparing these files does not mean a remote backend is running.
 
@@ -13,6 +13,14 @@ For the production container, provider setup, secrets, HTTPS origin, and accepta
 5. Run the frontend separately with `NEXT_PUBLIC_API_URL=http://localhost:3001` configured before `pnpm dev` or `pnpm build`; leave same-origin mode unset for this two-port setup. The development API defaults to port 3001 on loopback and the browser to port 3000. For the production container, use build-time `NEXT_PUBLIC_API_MODE=same-origin` with no API URL, runtime `SERVE_FRONTEND=true` and `FRONTEND_DIR=out`, and an exact HTTPS origin. `CLIENT_ORIGIN` takes precedence over `APP_ORIGIN`; Render's public URL is a fallback when neither is configured. Cross-site embeds and unrelated frontend/API sites cannot use the strict session cookie.
 
 Never commit `.env`. Run the server behind TLS. Proxy configuration should not log `/api/bot/completion` bodies, authentication proofs, or response streams. Logging is disabled in Fastify and Prisma by default here. In-memory IP rate limits do not coordinate multiple replicas; production replicas need a shared transient limiter. Public keys are authenticated through account lookup but should be verified out of band using safety numbers.
+
+## Veil AI configuration
+
+Veil AI uses a normal question-and-answer chat interface with a Powered by Ollama label. The current configuration is `AI_PROVIDER=ollama`, `OLLAMA_CLOUD_ENABLED=false`, and empty `OLLAMA_API_KEY` / `OLLAMA_MODEL` placeholders. Keep the API key on the server; never put it in a `NEXT_PUBLIC_*` variable. A key and model alone cannot activate inference. No PC worker or local Ollama bridge is used, and no live AI has been enabled.
+
+Ollama Cloud is [metered](https://ollama.com/pricing), not a guaranteed free hosted API. Future activation requires explicit approval, `OLLAMA_CLOUD_ENABLED=true`, a server-side key and an explicit model. Requests use the fixed hosted OpenAI-compatible endpoint; the server bounds concurrency, request duration and output, and never retries with a different provider or paid fallback. The separate legacy `AI_PROVIDER=openai-compatible` option additionally requires its `BOT_*` configuration and `BOT_ZERO_RETENTION_CONFIRMED=true`; that retention flag is an operator attestation, not a technical guarantee, and is not the Ollama activation gate.
+
+Only the raw exact configured chat-lock code is intercepted locally before consent, history, outbox or provider dispatch, even when AI or consent is off. Other input follows ordinary assistant checks. For live sessions, an inactive provider status rejects an ordinary prompt before history or outbox creation or a completion request. The provider can read prompts sent after future activation; encrypted saved assistant history does not provide end-to-end encryption to the model.
 
 ## HTTP contract
 
@@ -28,7 +36,8 @@ All mutations require an `Origin` header equal to the configured frontend origin
 - `GET /api/conversations` → `{conversations:[{id,username,public_key,online,last_message}]}`.
 - `GET /api/messages/:peerId?cursor=OPAQUE&limit=200` → `{messages,next_cursor}`; chronological envelopes ordered by timestamp and ID, maximum 500 per page. Pass the returned composite `next_cursor` unchanged to fetch the next older page; it is null when exhausted. This preserves messages that share a timestamp. Self ID retrieves encrypted assistant history.
 - `POST /api/bot/history` → `{ciphertext,iv}`; returns `{message}`. A self-addressed envelope stores the bot prompt or answer, encrypted on the client.
-- `POST /api/bot/completion` → `{prompt}`; OpenAI-compatible SSE response. Unavailable until all bot configuration is present and `BOT_ZERO_RETENTION_CONFIRMED=true`. This flag is an operator attestation, not a technical guarantee of the provider's retention policy.
+- `GET /api/bot/status` requires authentication and the active-account guard. The inactive configuration returns `{provider:"ollama",mode:"cloud",configured:false,connected:false}` without keys or endpoint details. Configured providers can include a model; `connected` records a successful upstream connection, not a guarantee of future availability.
+- `POST /api/bot/completion` → `{prompt}`; authenticated OpenAI-compatible SSE response. Inactive Ollama returns HTTP 503 with `Veil AI is inactive. Ollama Cloud has not been activated.` and makes no provider request, even if credentials have been saved. Enabled responses contain normalized text deltas and a final `[DONE]`; failures are sanitized and do not reveal upstream response bodies or secrets.
 - `POST /api/account/nuke` accepts optional `{expected_user_id}` to bind a deletion retry to the intended account, rejecting a changed session with HTTP 409 before deletion. Returns `{ok:true,erased:true}` only after a serializable transaction deletes sent/received/self messages, every session, and the user. Foreign-key cascades are also enforced. Timing depends on database/network conditions; no fixed sub-500ms server guarantee is made.
 
 Socket.io uses the same session cookie and websocket transport. Events: `message:send` accepts `{recipient_id,ciphertext,iv}` and acknowledges `{message}` or `{error}`; `message:receive` emits the stored envelope. `typing:send` accepts `{recipient_id,typing}` and emits `typing:receive` with `{user_id,typing}`. `message:read` accepts `{message_id}` and produces `message:receipt` with `{message_id,status,at}`. Presence changes emit `presence:update` with `{user_id,online}` only to conversation peers. `peer:erased` emits `{user_id}` after deletion; all the erased account's own sessions receive `account:erased` before disconnection.
@@ -39,7 +48,7 @@ A server erasure cannot complete while a device is offline. Clients must disting
 
 ## Verification
 
-Run `pnpm test` for crypto and envelope validation tests and `pnpm typecheck` for the whole project. A PostgreSQL instance is required to verify cross-session historical recovery, SQL ciphertext inspection, two-window peer purge, and atomic deletion. No production database verification is claimed by these source files. Before launch, run those PRD acceptance scenarios against the deployed database and configure an appropriate zero-retention provider agreement.
+Run `pnpm test` for crypto and envelope validation tests and `pnpm typecheck` for the whole project. A PostgreSQL instance is required to verify cross-session historical recovery, SQL ciphertext inspection, two-window peer purge, and atomic deletion. No production database verification is claimed by these source files. Before launch, run those PRD acceptance scenarios against the deployed database. Before any future AI activation, review the provider's current pricing and data-handling terms; legacy OpenAI-compatible configuration retains its separate operator-confirmed retention requirement.
 
 
 

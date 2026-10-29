@@ -38,16 +38,6 @@ export function ChatHistoryDialog({kind,count=1,busy,error,onClose,onConfirm}:{k
  </Dialog>;
 }
 
-export function LocalChatUnlockPanel({configured,open,lockedCount,onCloseLocked,onSettings}:{configured:boolean;open:boolean;lockedCount:number;onCloseLocked?:()=>void;onSettings?:()=>void}){
- return <div className={styles.unlockPanel}>
-  <span className={styles.lockMark}>{open?<UnlockKeyhole size={23}/>:<LockKeyhole size={23}/>}</span>
-  <h3>{open?'Locked chats are open':'Your locked chats'}</h3>
-  <p>{configured?(open?'This device can now open your locked conversations.':`Send your secret code below to open ${lockedCount===1?'your locked chat':'your locked chats'}.`):'Set a secret code in Settings, then choose which chats to lock.'}</p>
-  <small><ShieldCheck size={13}/>Chat-lock codes are checked on this device.</small>
-  <div className={styles.unlockActions}>{open&&onCloseLocked&&<button type="button" className="secondary-button" onClick={onCloseLocked}><LockKeyhole size={14}/>Close locked chats</button>}{!configured&&onSettings&&<button type="button" className="secondary-button" onClick={onSettings}>Set up chat lock</button>}</div>
- </div>;
-}
-
 export function ChatLockPreferences({onOpenChatLock,onResetDone,initialSelectedIds}:{onOpenChatLock?:()=>void;onResetDone?:()=>void;initialSelectedIds?:string[]}){
  const s=useVeilnivo();
  const [code,setCode]=useState(''),[confirmation,setConfirmation]=useState(''),[reveal,setReveal]=useState(false),[formError,setFormError]=useState<string|null>(null),[chosen,setChosen]=useState<string[]>(()=>[...new Set(initialSelectedIds??[])]),[resetConfirm,setResetConfirm]=useState(false);

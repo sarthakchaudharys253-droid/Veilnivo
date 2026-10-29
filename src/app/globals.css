@@ -38,3 +38,5 @@ body{font-family:'Segoe UI',Arial,Helvetica,sans-serif;font-size:14px}.global-he
  .conversation-tabs{height:40px;flex-shrink:0;gap:24px;margin:4px 4px 0}
  .conversation-tabs button{min-height:40px;padding:0;font-size:12px}
 }
+
+.chat-person h2 .ai-provider-label{font-size:9px;font-weight:400;line-height:1.5;letter-spacing:0;color:#9dbaa9;white-space:nowrap}.chat-person h2:has(.ai-provider-label){display:flex;align-items:center;gap:9px;flex-wrap:wrap}@media(max-width:700px){.chat-person h2 .ai-provider-label{font-size:8px}.chat-person h2:has(.ai-provider-label){gap:4px 7px}}

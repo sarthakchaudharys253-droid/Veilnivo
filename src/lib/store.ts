@@ -625,6 +625,12 @@ async function configureChatLock(code:string){
  const saved=await persistOrganizationChange([],'code',verifier);if(saved&&valid(generation,ownerId)){useVeilnivo.setState(current=>({conversations:current.conversations.some(c=>c.id===BOT)?current.conversations:[{...bot},...current.conversations]}));organizationView()}
  return saved;
 }
+async function revealChatVault(generation:number,ownerId:string,revision:number,mode:'demo'|'live'){
+ if(!valid(generation,ownerId)||revision!==chatLockRevision||typeof document!=='undefined'&&document.hidden)return false;
+ chatLockFailures=0;useVeilnivo.setState({lockedChatsOpen:true,chatSection:'locked',chatLockRetryAt:0,error:null,activeId:BOT});
+ if(mode==='live')for(const id of chatOrganization.lockedIds){await liveHistory(id);if(!valid(generation,ownerId)||revision!==chatLockRevision||!useVeilnivo.getState().lockedChatsOpen)return false}
+ await loadCache();if(!valid(generation,ownerId)||revision!==chatLockRevision||!useVeilnivo.getState().lockedChatsOpen)return false;organizationView();return true;
+}
 async function enterChatVault(code:string){
  const state=useVeilnivo.getState(),generation=epoch,ownerId=state.user?.id,revision=chatLockRevision,verifier=chatLockVerifier;if(!ownerId||state.busy)return false;
  if(!verifier){useVeilnivo.setState({error:'Set a secret code in Settings, or reset unavailable chat-lock settings.'});return false}
@@ -633,9 +639,7 @@ async function enterChatVault(code:string){
  try{
   const matches=await verifyChatLockCode(code,verifier);if(!valid(generation,ownerId)||revision!==chatLockRevision)return false;
   if(!matches){chatLockFailures++;const retryAt=chatLockFailures>=5?Date.now()+60_000:0;useVeilnivo.setState({chatLockRetryAt:retryAt,error:retryAt?'Too many attempts. Wait a minute before trying again.':'That secret code did not match. Nothing was sent to Veil AI.'});return false}
-  chatLockFailures=0;useVeilnivo.setState({lockedChatsOpen:true,chatSection:'locked',chatLockRetryAt:0,error:null,activeId:BOT});
-  if(state.mode==='live')for(const id of chatOrganization.lockedIds){await liveHistory(id);if(!valid(generation,ownerId)||revision!==chatLockRevision||!useVeilnivo.getState().lockedChatsOpen)return false}
-  await loadCache();if(!valid(generation,ownerId)||revision!==chatLockRevision||!useVeilnivo.getState().lockedChatsOpen)return false;organizationView();return true;
+  return await revealChatVault(generation,ownerId,revision,state.mode);
  }catch(error){if(valid(generation,ownerId))useVeilnivo.setState({error:err(error)});return false}
  finally{if(valid(generation,ownerId))useVeilnivo.setState({busy:false})}
 }
@@ -705,13 +709,30 @@ export const useVeilnivo:UseBoundStore<StoreApi<VeilnivoState>>=create<VeilnivoS
  send:async(raw,replyId)=>{
   const s=get(),peerId=s.activeId,generation=epoch,ownerId=s.user?.id,version=peerVersion(peerId),lockRevision=chatLockRevision;
   const current=()=>validPeer(generation,ownerId,peerId,version)&&get().activeId===peerId&&lockRevision===chatLockRevision&&(peerId!==BOT||s.lockedChatsOpen===get().lockedChatsOpen);
-  if(peerId===BOT&&s.hasChatLockCode&&!s.lockedChatsOpen){await get().enterLockedChats(raw);return}
-  if(peerId===BOT&&s.hasChatLockCode&&chatLockVerifier&&!validateChatLockCode(raw)){
-   if(s.busy)return;set({busy:true,error:null});
-   try{const matches=await verifyChatLockCode(raw,chatLockVerifier);if(!current())return;if(matches){changeChatSection('locked');return}}finally{if(valid(generation,ownerId))set({busy:false})}
+  if(peerId===BOT&&s.hasChatLockCode){
+   if(s.busy)return;
+   const verifier=chatLockVerifier;
+   if(!verifier){set({error:'Chat-lock settings could not be read. Reset chat lock in Settings before using the assistant.'});return}
+   if(!validateChatLockCode(raw)){
+    set({busy:true,error:null});
+    try{
+     const matches=await verifyChatLockCode(raw,verifier);if(!current()||verifier!==chatLockVerifier)return;
+     if(matches){
+      if(get().chatLockRetryAt>Date.now()){set({error:'Too many attempts. Wait a minute before trying again.'});return}
+      if(s.lockedChatsOpen)changeChatSection('locked');else await revealChatVault(generation,ownerId!,lockRevision,s.mode);
+      return;
+     }
+    }catch(error){if(current())set({error:err(error)});return}
+    finally{if(valid(generation,ownerId))set({busy:false})}
+   }
   }
   const text=raw.trim();if(!text||s.busy||!current())return;set({error:null,busy:true});
   try{
+   if(peerId===BOT&&s.mode==='live'&&nowOnline()){
+    let status:unknown;try{status=await api<unknown>('/api/bot/status',{signal:requests.signal})}catch{}
+    if(!current())return;
+    if(status&&typeof status==='object'&&'configured'in status&&status.configured===false)throw new Error('Veil AI is inactive. Ollama Cloud has not been activated.');
+   }
    if(text.length>10000)throw new Error('Keep messages under 10,000 characters.');
    const reply=s.messages[peerId]?.find(m=>m.id===replyId&&!m.deleted&&(!m.expiresAt||m.expiresAt>Date.now()));if(replyId&&!reply)throw new Error('That reply message was deleted or expired.');
    await sendPayload({text,timestamp:Date.now(),senderId:s.user!.id,type:'text',replyTo:reply?{id:reply.id,text:(reply.attachment?reply.attachment.name:reply.text).slice(0,160),own:reply.own,...(isGroupConversationId(peerId)?{senderId:reply.senderId,senderName:reply.senderName??s.user!.username}:{})}:undefined},peerId,current);
