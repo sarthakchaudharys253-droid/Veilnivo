@@ -136,6 +136,7 @@ model Message {
   attachments     Attachment[]
   @@unique([senderId,clientMessageId])
   @@index([senderId, recipientId])
+  @@index([senderId, recipientId, createdAt, id])
   @@index([recipientId, createdAt])
   @@index([expiresAt])
 }
@@ -210,6 +211,7 @@ model GroupMessage {
   group           Group @relation(fields:[groupId], references:[id], onDelete:Cascade)
   sender          User @relation(fields:[senderId], references:[id], onDelete:Cascade)
   @@unique([senderId,clientMessageId])
+  @@index([clientMessageId])
   @@index([groupId,createdAt,id])
   @@index([groupId,keyVersion])
 }

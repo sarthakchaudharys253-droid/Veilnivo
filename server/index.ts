@@ -17,6 +17,7 @@ import { webcrypto } from "node:crypto";
 import { v2Services, clientMessageId, deliveryExpiry, liveWhere } from "./v2";
 import {groupServices} from './groups';
 import {createAiProvider,AiProviderError,type AiProviderSession} from './ai-provider';
+import {latestConversationMessages} from './conversation-snapshots';
 
 import { InputError, base64, envelope, id, object, registration, username, encodeHistoryCursor, parseHistoryCursor } from "./validation";
 
@@ -118,7 +119,7 @@ export async function buildServer(env: NodeJS.ProcessEnv = process.env, database
   async function peerIds(userId:string) {
     const contacts=await database.contact.findMany({where:{status:"accepted",OR:[{userAId:userId},{userBId:userId}]},select:{userAId:true,userBId:true}});
     const peers=contacts.map(row=>row.userAId===userId?row.userBId:row.userAId);
-    const visible=[];for(const peerId of peers)if(!await v2.blocked(userId,peerId))visible.push(peerId);return visible;
+    const blocked=await v2.blockedPeerIds(userId,peers);return peers.filter(peerId=>!blocked.has(peerId));
   }
   async function announcePresence(userId:string) {
     const peers=await peerIds(userId);
@@ -178,11 +179,13 @@ export async function buildServer(env: NodeJS.ProcessEnv = process.env, database
   app.get("/api/conversations", {preHandler:authenticate}, async (request) => {
     const userId=request.principal.sub;
     const rows=await database.contact.findMany({where:{status:"accepted",OR:[{userAId:userId},{userBId:userId}]},include:{userA:{select:publicSelect},userB:{select:publicSelect}}});
-    const conversations=await Promise.all(rows.map(async row=>{
+    const peerIds=rows.map(row=>row.userAId===userId?row.userBId:row.userAId);
+    const [blockedPeers,latestMessages]=await Promise.all([v2.blockedPeerIds(userId,peerIds),latestConversationMessages(database,userId,peerIds)]);
+    const conversations=rows.map(row=>{
       const user=row.userAId===userId?row.userB:row.userA;
-      const blocked=await v2.blocked(userId,user.id);
-      return {id:user.id,username:user.username,public_key:JSON.parse(user.publicKeyJwk),online:!blocked&&online(user.id),blocked,ttl_seconds:row.ttlSeconds,last_message:await database.message.findFirst({where:{AND:[{OR:[{senderId:userId,recipientId:user.id},{senderId:user.id,recipientId:userId}]},liveWhere()]},orderBy:[{createdAt:"desc"},{id:"desc"}]})};
-    }));
+      const blocked=blockedPeers.has(user.id);
+      return {id:user.id,username:user.username,public_key:JSON.parse(user.publicKeyJwk),online:!blocked&&online(user.id),blocked,ttl_seconds:row.ttlSeconds,last_message:latestMessages.get(user.id)??null};
+    });
     conversations.sort((a,b)=>(b.last_message?.createdAt.getTime()||0)-(a.last_message?.createdAt.getTime()||0));return {conversations};
   });
   app.get("/api/messages/:peerId", {preHandler:authenticate}, async (request) => {

@@ -18,7 +18,7 @@ function once<T>(socket:Socket,event:string):Promise<T>{return new Promise((reso
 test('SQL groups authorize member keys/history, rotate membership atomically, and coordinate erasure',{skip:!process.env.TEST_DATABASE_URL,timeout:90000},async t=>{
  const {PrismaClient}=await import('@prisma/client'),{buildServer}=await import('./index'),{io:connectSocket}=await import('socket.io-client');
  const database=new PrismaClient({datasources:{db:{url:process.env.TEST_DATABASE_URL}}}),origin='http://localhost:3000';
- const {app}=await buildServer({...process.env,DATABASE_URL:process.env.TEST_DATABASE_URL,JWT_SECRET:randomBytes(48).toString('base64url'),CLIENT_ORIGIN:origin,NODE_ENV:'test'},database);
+ const {app,io}=await buildServer({...process.env,DATABASE_URL:process.env.TEST_DATABASE_URL,JWT_SECRET:randomBytes(48).toString('base64url'),CLIENT_ORIGIN:origin,NODE_ENV:'test'},database);
  const accounts:{id:string;cookie:string;username:string}[]=[],sockets:Socket[]=[];
  try{
   await app.listen({host:'127.0.0.1',port:0});const address=app.server.address();assert.ok(address&&typeof address!=='string');const endpoint=`http://127.0.0.1:${address.port}`;
@@ -102,6 +102,17 @@ test('SQL groups authorize member keys/history, rotate membership atomically, an
    await database.contact.createMany({data:others.map(userId=>({...pair(alice.id,userId),requestedById:alice.id,status:'accepted'}))});
    const large=randomUUID(),response=await request('POST','/api/groups',alice,{id:large,name:'More than one roster page',member_ids:others,envelopes:keys([alice.id,...others])});assert.equal(response.statusCode,201,response.body);assert.equal(response.json().group.memberCount,105);
    const first=(await request('GET',`/api/groups/${large}/members`)).json();assert.equal(first.members.length,100);assert.ok(first.next_cursor);const second=(await request('GET',`/api/groups/${large}/members?cursor=${first.next_cursor}`)).json();assert.equal(second.members.length,5);assert.equal(second.next_cursor,null);
+   // The adapter encodes one packet for the union of member rooms rather than
+   // encoding the same ciphertext separately for every account in the group.
+   const adapter=io.of('/').adapter,broadcast=adapter.broadcast.bind(adapter),packets:{rooms:string[];data:unknown[]}[]=[];
+   const spy=t.mock.method(adapter,'broadcast',(packet:Parameters<typeof adapter.broadcast>[0],options:Parameters<typeof adapter.broadcast>[1])=>{if(packet.data?.[0]==='group:message')packets.push({rooms:[...options.rooms],data:packet.data});return broadcast(packet,options)});
+   try{
+    const body={client_message_id:randomUUID(),key_version:1,...encrypted()},sent=await request('POST',`/api/groups/${large}/messages`,alice,body);assert.equal(sent.statusCode,201,sent.body);
+    assert.equal(packets.length,1,'one broadcast operation serves all 105 authorized member rooms');
+    assert.deepEqual(new Set(packets[0].rooms),new Set([alice.id,...others].map(userId=>'user:'+userId)));
+    assert.equal((packets[0].data[1] as {id:string}).id,sent.json().message.id);
+    const replay=await request('POST',`/api/groups/${large}/messages`,alice,body);assert.equal(replay.statusCode,200);assert.equal(packets.length,1,'idempotent replay never emits another packet');
+   }finally{spy.mock.restore()}
   });
   await t.test('owner erasure cascades groups, member keys and encrypted group history',async()=>{
    const erased=await request('POST','/api/account/nuke',alice,{expected_user_id:alice.id});assert.equal(erased.statusCode,200,erased.body);assert.equal(await database.group.count({where:{id:groupId}}),0);assert.equal(await database.groupMember.count({where:{groupId}}),0);assert.equal(await database.groupKeyEnvelope.count({where:{groupId}}),0);assert.equal(await database.groupMessage.count({where:{groupId}}),0);

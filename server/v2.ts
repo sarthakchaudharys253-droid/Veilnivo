@@ -42,6 +42,15 @@ export function v2Services({app,database,io,authenticate,erasingUsers,activeSend
  const room=(userId:string)=>`user:${userId}`;
  const peer=(user:{id:string;username:string;publicKeyJwk:string})=>({id:user.id,username:user.username,public_key:JSON.parse(user.publicKeyJwk),online:online(user.id)});
  async function blocked(a:string,b:string,tx:Db=database){return !!await tx.block.findFirst({where:{OR:[{blockerId:a,blockedId:b},{blockerId:b,blockedId:a}]},select:{id:true}});}
+ async function blockedPeerIds(userId:string,peerIds:string[],tx:Db=database){
+  const peers=[...new Set(peerIds)].filter(peerId=>peerId!==userId),hidden=new Set<string>();
+  // A fixed batch avoids both a query per contact and an unbounded SQL bind list.
+  for(let offset=0;offset<peers.length;offset+=1000){
+   const ids=peers.slice(offset,offset+1000),rows=await tx.block.findMany({where:{OR:[{blockerId:userId,blockedId:{in:ids}},{blockedId:userId,blockerId:{in:ids}}]},select:{blockerId:true,blockedId:true}});
+   for(const row of rows)hidden.add(row.blockerId===userId?row.blockedId:row.blockerId);
+  }
+  return hidden;
+ }
  async function accepted(a:string,b:string,tx:Db=database){if(a===b)throw new InputError('Choose another person.');if(await blocked(a,b,tx))throw new InputError('This conversation is blocked.');const contact=await tx.contact.findUnique({where:{userAId_userBId:pair(a,b)}});if(!contact||contact.status!=='accepted'){const err=new InputError('Accept the message request before sending messages.');err.statusCode=403;throw err;}return contact;}
  function ensureAvailable(...ids:string[]){if(ids.some(user=>erasingUsers.has(user)))throw new InputError('Account erasure is in progress.');}
  async function tracked<T>(participants:string[],fn:()=>Promise<T>):Promise<T>{ensureAvailable(...participants);let result:T;const task=(async()=>{result=await fn();})();for(const participant of new Set(participants)){const tasks=activeSends.get(participant)||new Set<Promise<void>>();tasks.add(task);activeSends.set(participant,tasks);}try{await task;return result!;}finally{for(const participant of participants){const tasks=activeSends.get(participant);tasks?.delete(task);if(!tasks?.size)activeSends.delete(participant);}}}
@@ -169,7 +178,8 @@ export function v2Services({app,database,io,authenticate,erasingUsers,activeSend
  });
  app.get('/api/requests',{preHandler:authenticate},async request=>{
   const userId=request.principal.sub;const rows=await database.contact.findMany({where:{status:'pending',OR:[{userAId:userId},{userBId:userId}]},include:{userA:{select:{id:true,username:true,publicKeyJwk:true}},userB:{select:{id:true,username:true,publicKeyJwk:true}}},orderBy:{createdAt:'desc'}});
-  const requests=[];for(const row of rows){const other=row.userAId===userId?row.userB:row.userA;if(!await blocked(userId,other.id))requests.push({id:row.id,direction:row.requestedById===userId?'outgoing':'incoming',peer:peer(other),status:row.status});}return {requests};
+  const hidden=await blockedPeerIds(userId,rows.map(row=>row.userAId===userId?row.userBId:row.userAId));
+  const requests=[];for(const row of rows){const other=row.userAId===userId?row.userB:row.userA;if(!hidden.has(other.id))requests.push({id:row.id,direction:row.requestedById===userId?'outgoing':'incoming',peer:peer(other),status:row.status});}return {requests};
  });
  app.post('/api/contacts/request',{preHandler:authenticate,config:{rateLimit:{max:20,timeWindow:'1 hour'}}},async request=>{
   const userId=request.principal.sub;const other=await resolveUser(username(object(request.body).username));if(!other||other.id===userId)throw new InputError('Choose another registered username.');return tracked([userId,other.id],async()=>{if(await blocked(userId,other.id))throw new InputError('This conversation is unavailable.');const pairIds=pair(userId,other.id);const row=await database.contact.upsert({where:{userAId_userBId:pairIds},create:{...pairIds,requestedById:userId,status:'pending'},update:{}});if(row.status==='declined')throw new InputError('This request was declined. Ask the person to share an invitation.');updated(userId,other.id);return {request:{id:row.id,direction:row.requestedById===userId?'outgoing':'incoming',peer:peer(other),status:row.status},peer:peer(other),status:row.status};});
@@ -191,14 +201,20 @@ export function v2Services({app,database,io,authenticate,erasingUsers,activeSend
   const data=encryptedAttachment(request.body),userId=request.principal.sub;return tracked([userId,data.recipientId],async()=>{const contact=await accepted(userId,data.recipientId);const attachment=await database.attachment.create({data:{ownerId:userId,...data,expiresAt:null,orphanExpiresAt:new Date(Date.now()+15*60*1000)}});return reply.code(201).send({attachment:{id:attachment.id,size:attachment.size,expiresAt:attachment.expiresAt}});});
  });
  app.get('/api/attachments/:id',{preHandler:authenticate},async(request,reply)=>{
-  const userId=request.principal.sub;const file=await database.attachment.findUnique({where:{id:id(object(request.params).id)}});if(!file||![file.ownerId,file.recipientId].includes(userId)||file.expiresAt&&file.expiresAt.getTime()<=Date.now())return reply.code(404).send({error:'This encrypted file is unavailable or expired.'});if(file.orphanExpiresAt&&file.orphanExpiresAt.getTime()<=Date.now())return reply.code(404).send({error:'This upload expired before being sent.'});if(userId!==file.ownerId){if(!file.messageId)return reply.code(404).send({error:'This file has not been sent.'});await accepted(file.ownerId,file.recipientId);}return {ciphertext:file.ciphertext,iv:file.iv,size:file.size,expiresAt:file.expiresAt};
+  const userId=request.principal.sub,now=new Date();const file=await database.attachment.findUnique({where:{id:id(object(request.params).id),OR:[{ownerId:userId},{recipientId:userId}],AND:[{OR:[{expiresAt:null},{expiresAt:{gt:now}}]},{OR:[{orphanExpiresAt:null},{orphanExpiresAt:{gt:now}}]}]}});if(!file||![file.ownerId,file.recipientId].includes(userId)||file.expiresAt&&file.expiresAt.getTime()<=Date.now())return reply.code(404).send({error:'This encrypted file is unavailable or expired.'});if(file.orphanExpiresAt&&file.orphanExpiresAt.getTime()<=Date.now())return reply.code(404).send({error:'This upload expired before being sent.'});if(userId!==file.ownerId){if(!file.messageId)return reply.code(404).send({error:'This file has not been sent.'});await accepted(file.ownerId,file.recipientId);}return {ciphertext:file.ciphertext,iv:file.iv,size:file.size,expiresAt:file.expiresAt};
  });
  app.get('/api/aliases',{preHandler:authenticate},async request=>({aliases:(await database.alias.findMany({where:{userId:request.principal.sub},select:{username:true,createdAt:true}})).map(x=>({username:x.username,created_at:x.createdAt}))}));
  app.post('/api/aliases',{preHandler:authenticate,config:{rateLimit:{max:5,timeWindow:'1 hour'}}},async(request,reply)=>{
   const userId=request.principal.sub,handle=username(object(request.body).username);return tracked([userId],async()=>{const alias=await database.$transaction(async tx=>{await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${handle}))`;await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${userId}))`;if(await tx.alias.count({where:{userId}})>=3)throw new InputError('You can create up to three aliases.');if(await resolveUser(handle,tx))throw new InputError('That username is unavailable.');return tx.alias.create({data:{userId,username:handle},select:{username:true,createdAt:true}});});return reply.code(201).send({alias:{username:alias.username,created_at:alias.createdAt}});});
  });
  app.delete('/api/aliases/:username',{preHandler:authenticate},async request=>{await database.alias.deleteMany({where:{userId:request.principal.sub,username:username(object(request.params).username)}});return {ok:true};});
- async function cleanupExpired(){const now=new Date();const expired=await database.message.findMany({where:{expiresAt:{lte:now}},select:{id:true,senderId:true,recipientId:true},take:1000});if(expired.length){await database.message.deleteMany({where:{id:{in:expired.map(x=>x.id)},expiresAt:{lte:now}}});for(const row of expired){io.to(room(row.senderId)).emit('message:expired',{message_id:row.id});if(row.senderId!==row.recipientId)io.to(room(row.recipientId)).emit('message:expired',{message_id:row.id});}}await database.attachment.deleteMany({where:{OR:[{expiresAt:{lte:now}},{orphanExpiresAt:{lte:now}}]}});await database.invitation.deleteMany({where:{expiresAt:{lt:new Date(now.getTime()-7*86400000)}}});}
+ async function runCleanup(){const now=new Date();const expired=await database.message.findMany({where:{expiresAt:{lte:now}},select:{id:true,senderId:true,recipientId:true},take:1000});if(expired.length){await database.message.deleteMany({where:{id:{in:expired.map(x=>x.id)},expiresAt:{lte:now}}});for(const row of expired){io.to(room(row.senderId)).emit('message:expired',{message_id:row.id});if(row.senderId!==row.recipientId)io.to(room(row.recipientId)).emit('message:expired',{message_id:row.id});}}await database.attachment.deleteMany({where:{OR:[{expiresAt:{lte:now}},{orphanExpiresAt:{lte:now}}]}});await database.invitation.deleteMany({where:{expiresAt:{lt:new Date(now.getTime()-7*86400000)}}});}
+ let cleanupPending:Promise<void>|undefined;
+ async function cleanupExpired(){
+  if(cleanupPending)return cleanupPending;
+  const pending=runCleanup();cleanupPending=pending;
+  try{await pending}finally{if(cleanupPending===pending)cleanupPending=undefined}
+ }
  const cleanupTimer=setInterval(()=>{void cleanupExpired().catch(()=>undefined);},30_000);cleanupTimer.unref();app.addHook('onClose',async()=>clearInterval(cleanupTimer));
- return {blocked,accepted,resolveUser,sendEncrypted,mutateMessage,markMessageRead,cleanupExpired,tracked,ensureAvailable};
+ return {blocked,blockedPeerIds,accepted,resolveUser,sendEncrypted,mutateMessage,markMessageRead,cleanupExpired,tracked,ensureAvailable};
 }

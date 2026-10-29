@@ -21,7 +21,12 @@ async function fixture(){
  const database={
   session:{findUnique:async({where}:{where:{id:string}})=>{if(where.id===aliceSession&&sessionGate){const held=sessionGate;sessionGate=undefined;await held.wait();}return sessionRows.get(where.id)??null;}},
   contact:{findUnique:async()=>contact,findMany:async({where}:{where:{OR:{userAId?:string}[]}})=>{if(where.OR[0].userAId===alice&&presenceGate){const held=presenceGate;presenceGate=undefined;await held.wait();}return[contact];}},
-  block:{findFirst:async()=>null},$disconnect:async()=>{},
+  block:{findFirst:async()=>null,findMany:async({where,select}:{where:{OR:[{blockerId:string;blockedId:{in:string[]}},{blockedId:string;blockerId:{in:string[]}}]};select:Record<string,boolean>})=>{
+   const [outgoing,incoming]=where.OR,caller=outgoing.blockerId,other=caller===alice?bob:alice;
+   assert.ok(caller===alice||caller===bob);assert.equal(incoming.blockedId,caller);
+   assert.deepEqual(outgoing.blockedId.in,[other]);assert.deepEqual(incoming.blockerId.in,[other]);assert.deepEqual(select,{blockerId:true,blockedId:true});
+   return[];
+  }},$disconnect:async()=>{},
  } as unknown as PrismaClient;
  const {app,io}=await buildServer(env,database),sockets:Socket[]=[];
  await app.listen({host:'127.0.0.1',port:0});const address=app.server.address();assert.ok(address&&typeof address!=='string');const port=address.port;
