@@ -1,6 +1,6 @@
 # Netlify frontend and free Render backend
 
-The free beta is deployed at [veilnivo.netlify.app](https://veilnivo.netlify.app/) with its [Render backend](https://veilnivo-api-free.onrender.com/api/ready) and PostgreSQL connected. The latest 28 October 2026 release places unboxed message dots inside each bubble, makes Edit message explicit, and limits Delete for everyone to unread messages or the first 30 minutes after recipient read. Public checks passed editing after read, immutable read timestamps, deletion within the window through the sender API, replies, reactions, encrypted forwarding and sign-in recovery. Exactly three generated QA identities were removed through their own sessions; existing user data was untouched. Normal device-keyboard typing and the compact sidebar remain. See [VERIFICATION.md](VERIFICATION.md) for the precise scope and earlier checks.
+The free beta is deployed at [veilnivo.netlify.app](https://veilnivo.netlify.app/) with its [Render backend](https://veilnivo-api-free.onrender.com/api/ready) and PostgreSQL connected. The latest 29 October 2026 frontend release adds bulk chat selection, pinning, archiving, device-local clear/delete and secret-code chat lock. Free allows 3 pinned chats; the displayed $4/month Plus plan with 10 pins has inactive payments. Public checks passed bulk pin/unpin, archive/unarchive, sign-in persistence, phone layout, chat-lock setup rendering and Clear chat confirmation. Automated tests cover secret verification, vault closure and forgotten-code reset. See [VERIFICATION.md](VERIFICATION.md) for the precise scope and earlier message-action checks.
 
 ## Current deployment record
 
@@ -10,13 +10,13 @@ The free beta is deployed at [veilnivo.netlify.app](https://veilnivo.netlify.app
 | Public backend | https://veilnivo-api-free.onrender.com |
 | Source | https://github.com/sarthakchaudharys253-droid/Veilnivo |
 | Backend source commit | `5e1e33584cb30dc03122e913c6f6c45dfed1d57f` |
-| Frontend source commit | `5e1e33584cb30dc03122e913c6f6c45dfed1d57f` |
+| Frontend source commit | `98d3c5749b04b86dfcde9cda404ca75f91b2d9f5` |
 | Render workspace | My Workspace, `tea-dbfikelg1s2s73fvboag` |
 | Render Blueprint | `veilnivo-netlify-free` |
 | Render web service | `veilnivo-api-free`, `srv-dbg80dmc6qcc73ekou90` |
 | Verified Live backend deploy | `dep-dbh007utlv9c73dhbgmg` at `2026-10-28T14:02:54.981545Z` |
 | Render database | `veilnivo-db-free`, `dpg-dbg7spl9fdbs73d1ms7g-a` |
-| Published Netlify deploy | `6ae200a4522297e6e24b19fb`, 28 October 2026, 7:33 PM IST |
+| Published Netlify deploy | `6ae2a37942820e1594c98eb6`, 29 October 2026, 7:08 AM IST |
 | Database expiry | **26 November 2026, 4:05 PM IST** (`2026-11-26T10:35:18.553914Z`) |
 
 Both Render resources use Free plans in Singapore. The existing database was associated with the Blueprint, preserving that resource. Later documentation/build-helper updates do not change the source commit recorded for the verified release above.
@@ -24,6 +24,8 @@ Both Render resources use Free plans in Singapore. The existing database was ass
 The compact-sidebar frontend update reduced the phone Messages heading, search and tabs from 179px to 132px and removed the lower sidebar invitation card. User lookup and invitations remain accessible from the header controls. Desktop control styling and native keyboard input were unchanged; no backend deployment or database migration was needed.
 
 The coordinated update at source `5e1e33584cb30dc03122e913c6f6c45dfed1d57f` puts dots at the top right of own bubbles and top left of received bubbles. The first-read deletion deadline is enforced by the server; repeated reads and edits do not restart it, and editing remains available after deletion closes. All 139 regression tests and the production build passed. The existing Render service reached Live as `dep-dbh007utlv9c73dhbgmg` at `2026-10-28T14:02:54.981545Z` (28 October, 7:32:54 PM IST), followed by the matching Netlify publication at 7:33 PM IST. Public checks confirmed the corner controls, edit/read-time preservation, within-window API deletion and recovery. The exact elapsed cutoff was tested against isolated PostgreSQL rather than by waiting 30 minutes publicly. This update needed no new database migration.
+
+The 29 October chat-organization frontend at source `98d3c5749b04b86dfcde9cda404ca75f91b2d9f5` was published as Netlify deployment `6ae2a37942820e1594c98eb6` at 7:08 AM IST. All 146 regression tests and the production webpack build passed. Organization and lock settings are encrypted in this device's browser storage; they do not add server metadata synchronization. Clear/delete and forgotten-code reset affect this device, with persistent local clear markers preventing old server history from reappearing on an ordinary sign-in. The existing Render service/database and message protocol were unchanged; this release requires no backend deploy or new migration.
 
 The current Render service was created from a public repository URL, which requires a manual deploy of the latest `main` commit. Its auto-deploy setting alone does not establish a connected Git provider. Check for an existing deployment before triggering one; connecting a Git provider separately can enable automatic deploys. The existing Netlify project uses manual Drop uploads and is not linked to Git. Frontend changes require a local rebuild and upload to the same Netlify project unless Git-based Netlify deployment is configured separately. Reuse these resources; do not create a second project or database for routine updates.
 
