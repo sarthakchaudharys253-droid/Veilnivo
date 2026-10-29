@@ -1,6 +1,6 @@
 # Netlify frontend and free Render backend
 
-The free beta is deployed at [veilnivo.netlify.app](https://veilnivo.netlify.app/) with its [Render backend](https://veilnivo-api-free.onrender.com/api/ready) and PostgreSQL connected. The latest 29 October 2026 release adds encrypted group chats under the plus button and moves chat selection to mobile long-press or desktop right-click. Members share text, replies and emoji reactions; creators can add contacts with a new encryption-key version. Public checks passed group creation, four-member delivery, earlier-history exclusion for an added member, sign-in recovery, desktop checkbox selection and phone layout. All 168 regression checks and the production build passed. See [VERIFICATION.md](VERIFICATION.md) for the precise scope and touch-hardware limits.
+The free beta is deployed at [veilnivo.netlify.app](https://veilnivo.netlify.app/) with its [Render backend](https://veilnivo-api-free.onrender.com/api/ready) and PostgreSQL connected. The latest 29 October 2026 release restores a normal Veil AI conversation with a native textarea and Powered by Ollama attribution. Ollama Cloud is selected but explicitly inactive; no live inference is enabled. Only the exact configured secret code opens locked chats locally. All 179 regression checks and the production build passed. Public checks confirmed the inactive API gate, desktop/phone interface and absence of a message after an inactive question. See [VERIFICATION.md](VERIFICATION.md) for the precise scope and earlier group/message checks.
 
 ## Current deployment record
 
@@ -9,17 +9,19 @@ The free beta is deployed at [veilnivo.netlify.app](https://veilnivo.netlify.app
 | Public frontend | https://veilnivo.netlify.app/ |
 | Public backend | https://veilnivo-api-free.onrender.com |
 | Source | https://github.com/sarthakchaudharys253-droid/Veilnivo |
-| Backend source commit | `87fb9a9cc3dd58d2626f82a404c3d6af9b4b9d87` |
-| Frontend source commit | `87fb9a9cc3dd58d2626f82a404c3d6af9b4b9d87` |
+| Backend source commit | `bee20298a873b5982d07fc3e50fa1e5efd5390ce` |
+| Frontend source commit | `bee20298a873b5982d07fc3e50fa1e5efd5390ce` |
 | Render workspace | My Workspace, `tea-dbfikelg1s2s73fvboag` |
 | Render Blueprint | `veilnivo-netlify-free` |
 | Render web service | `veilnivo-api-free`, `srv-dbg80dmc6qcc73ekou90` |
-| Verified Live backend deploy | `dep-dbharu0m7kps73ectu1g` at `2026-10-29T02:25:27.52027Z` |
+| Verified Live backend deploy | `dep-dbhf9em1egvs73fdtua0` at `2026-10-29T07:27:00.986895Z` |
 | Render database | `veilnivo-db-free`, `dpg-dbg7spl9fdbs73d1ms7g-a` |
-| Published Netlify deploy | `6ae2aec4bb1e5378e6397703`, 29 October 2026, 7:56 AM IST |
+| Published Netlify deploy | `6ae2f4d0b1793301da8c2828`, 29 October 2026, 12:55 PM IST |
 | Database expiry | **26 November 2026, 4:05 PM IST** (`2026-11-26T10:35:18.553914Z`) |
 
 Both Render resources use Free plans in Singapore. The existing database was associated with the Blueprint, preserving that resource. Later documentation/build-helper updates do not change the source commit recorded for the verified release above.
+
+Ollama Cloud's current runtime settings are maintained on the existing Render service: `AI_PROVIDER=ollama` and `OLLAMA_CLOUD_ENABLED=false`. This scoped merge preserved unrelated environment variables. The checked-in Blueprint omits these keys, so a later Blueprint sync preserves their service values. Server-only key/model placeholders are documented in `.env.example`; a key alone cannot enable cloud calls. The inactive status and HTTP 503 completion response were verified after the deploy reached Live. The PC worker alternative was removed and no PC model/worker was started. Ollama's [metered pricing](https://ollama.com/pricing) requires a separate deliberate activation decision; this deployment enables no AI billing.
 
 The compact-sidebar frontend update reduced the phone Messages heading, search and tabs from 179px to 132px and removed the lower sidebar invitation card. User lookup and invitations remain accessible from the header controls. Desktop control styling and native keyboard input were unchanged; no backend deployment or database migration was needed.
 
