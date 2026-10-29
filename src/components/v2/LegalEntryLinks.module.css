@@ -1,0 +1,74 @@
+.auth,
+.security,
+.settings {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 16px;
+}
+
+.auth {
+  justify-content: center;
+  margin-top: 10px;
+}
+
+.security {
+  margin: 24px 0 16px;
+  padding: 12px 0;
+  border-top: 1px solid #2b3836;
+  border-bottom: 1px solid #2b3836;
+}
+
+.settings {
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid #2b3836;
+}
+
+.auth a,
+.security a,
+.settings a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 36px;
+  max-width: 100%;
+  color: #bed8c9;
+  font-size: 12px;
+  line-height: 1.5;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  border-radius: 4px;
+}
+
+.auth a:hover,
+.security a:hover,
+.settings a:hover {
+  color: #e8f8ed;
+}
+
+.auth a:focus-visible,
+.security a:focus-visible,
+.settings a:focus-visible {
+  outline: 2px solid #b4dac4;
+  outline-offset: 4px;
+}
+
+.settings a {
+  justify-content: flex-start;
+}
+
+@media (max-width: 700px) {
+  .auth,
+  .security {
+    gap: 4px 14px;
+  }
+
+  .auth a,
+  .security a,
+  .settings a {
+    min-height: 44px;
+    font-size: 11px;
+  }
+}

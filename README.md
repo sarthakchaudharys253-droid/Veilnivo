@@ -22,6 +22,12 @@ A dark, two-pane encrypted messenger built with Next.js App Router, TypeScript, 
 - Separate local/server erasure states. One header erase control; Ctrl+Shift+Backspace opens the same confirmation.
 - Free/Plus pricing experiment and explicit inactive billing. Feedback can be exported locally, with no automatic submission or analytics.
 
+## Public privacy, terms and safety
+
+Visitors can read the [Privacy policy](https://veilnivo.netlify.app/privacy/), [Terms of use](https://veilnivo.netlify.app/terms/), [Acceptable use rules](https://veilnivo.netlify.app/acceptable-use/) and [Contact & safety guidance](https://veilnivo.netlify.app/support/) without signing in. The [legal overview](https://veilnivo.netlify.app/legal/) links them together. Sign-in, Settings and Privacy & trust expose the same pages; messenger links open separately to preserve drafts.
+
+The notices explain username/password signup without a phone number or email, encrypted content and visible metadata, essential storage, hosting, deletion controls, inactive AI and valid legal requests. They do not introduce private-chat scanning or an AI crime-detection system. The operator supplied a public email for voluntary privacy, abuse and legal requests; there is no automatic in-app report inbox. See [LEGAL-NOTICES.md](LEGAL-NOTICES.md) for configuration and remaining operator-specific legal setup.
+
 ## Run the local preview
 
 Use Node.js 22+ and pnpm 11.25, then:

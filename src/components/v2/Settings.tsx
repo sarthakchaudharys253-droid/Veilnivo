@@ -5,6 +5,7 @@ import {useVeilnivo} from '@/lib/store';
 import {Dialog,Toggle} from './UI';
 import {ChatLockPreferences} from './ChatManagement';
 import styles from './ChatManagement.module.css';
+import legalLinks from './LegalEntryLinks.module.css';
 
 interface SettingsProps {onClose:()=>void;onLock:()=>void;onIdentity:()=>void;onPrivacy:()=>void;onOpenChatLock?:()=>void;initialTab?:'general'|'identity'|'chat-lock'|'plans';initialLockChatIds?:string[]}
 
@@ -36,6 +37,7 @@ export function Settings({onClose,onLock,onIdentity,onPrivacy,onOpenChatLock,ini
    <div className="plan-card plus-plan"><span>VEILNIVO PLUS</span><h3>$4<small>/month</small></h3><p>Planned convenience for a growing inbox.</p><ul><li><CheckCircle2 size={14}/>10 pinned chats when Plus launches</li><li><CheckCircle2 size={14}/>Planned larger attachments</li><li><CheckCircle2 size={14}/>Additional customization</li><li><Sparkles size={14}/>AI billed separately, if enabled</li></ul><span className="plan-label">PLANNED · PAYMENTS INACTIVE</span></div></div>
    <p className="local-notice">Subscriptions and payments are not active. All current accounts use the Free limit of 3 pinned chats.</p><button type="button" className="secondary-button full feedback-open" onClick={()=>setFeedback(true)}>Share launch feedback<ArrowUpRight size={15}/></button>
   </>}
+  <nav className={legalLinks.settings} aria-label="Legal information"><a href="/legal/" target="_blank" rel="noopener noreferrer" aria-label="Legal and safety information (opens in a new tab)" title="Opens in a new tab">Legal &amp; safety<ArrowUpRight size={14}/></a></nav>
   {s.error&&<p className="form-error" role="alert">{s.error}</p>}
   {feedback&&<Feedback onClose={()=>setFeedback(false)}/>}
  </Dialog>;
