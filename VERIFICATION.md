@@ -147,7 +147,9 @@ The separate local runner retains its application database and stable session se
 
 - PASS: Production webpack export and TypeScript validation completed. The five legal routes and their cross-links/effective date/public email still passed the static export checks. No backend code or migration changed.
 - PASS: Source review confirms that Create identity renders a native required password confirmation immediately after Password, with minimum length 12, new-password autocomplete, linked hints and accessible mismatch feedback. The submit handler returns on an exact-value mismatch before calling registration. Confirmation is not passed to the store/API or persisted. Success, account change, lock, erase, auth-mode changes and auth-modal closure clear the auth secrets; sign-in retains one password field.
-- Browser verification checks the empty form and field metadata without entering or creating a new credential. No new account is needed for this presentation check.
+- PASS: Source `dfa48426efd0d8c476d6bf6afc4168f840d6924f` was published to the existing Netlify project as deployment `6ae339a823d8d26699028f41` on 29 October at 5:48 PM IST. The validated static ZIP contains 81 files (662,320 bytes). The backend/database remain unchanged.
+- PASS: The public browser showed the fields in order: Username, Password, Confirm password. Confirmation metadata was `type=password`, `required=true`, `minLength=12` and `autocomplete=new-password`. Switching to Sign in left exactly one password field and zero confirmation fields; switching back restored confirmation. Legal links remained beneath the form. Screenshot: `outputs/Veilnivo-confirm-password.jpg`.
+- No credential was entered or created, and no signup was submitted during the browser check. Mismatch prevention and secret-clearing boundaries were verified by source review rather than a public account-creation round trip. The empty Create identity page was retained.
 
 ## Remaining limits
 

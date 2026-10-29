@@ -10,16 +10,18 @@ The free beta is deployed at [veilnivo.netlify.app](https://veilnivo.netlify.app
 | Public backend | https://veilnivo-api-free.onrender.com |
 | Source | https://github.com/sarthakchaudharys253-droid/Veilnivo |
 | Backend source commit | `bee20298a873b5982d07fc3e50fa1e5efd5390ce` |
-| Frontend source commit | `6ad30595bc89c384b122549b8318509d4d261343` |
+| Frontend source commit | `dfa48426efd0d8c476d6bf6afc4168f840d6924f` |
 | Render workspace | My Workspace, `tea-dbfikelg1s2s73fvboag` |
 | Render Blueprint | `veilnivo-netlify-free` |
 | Render web service | `veilnivo-api-free`, `srv-dbg80dmc6qcc73ekou90` |
 | Verified Live backend deploy | `dep-dbhf9em1egvs73fdtua0` at `2026-10-29T07:27:00.986895Z` |
 | Render database | `veilnivo-db-free`, `dpg-dbg7spl9fdbs73d1ms7g-a` |
-| Published Netlify deploy | `6ae3377c11cc9f8eacec16aa`, 29 October 2026, 5:39 PM IST |
+| Published Netlify deploy | `6ae339a823d8d26699028f41`, 29 October 2026, 5:48 PM IST |
 | Database expiry | **26 November 2026, 4:05 PM IST** (`2026-11-26T10:35:18.553914Z`) |
 
 Both Render resources use Free plans in Singapore. The existing database was associated with the Blueprint, preserving that resource. Later documentation/build-helper updates do not change the source commit recorded for the verified release above.
+
+The 5:48 PM frontend update adds Confirm password immediately below Password in Create identity. Registration rejects mismatched entries locally before account creation starts; confirmation is not stored or sent to the backend. Public browser checks confirmed the native required field and that sign-in still has one password field. The policy pages and public email remain available from the form; no backend deployment or migration was needed.
 
 Ollama Cloud's current runtime settings are maintained on the existing Render service: `AI_PROVIDER=ollama` and `OLLAMA_CLOUD_ENABLED=false`. This scoped merge preserved unrelated environment variables. The checked-in Blueprint omits these keys, so a later Blueprint sync preserves their service values. Server-only key/model placeholders are documented in `.env.example`; a key alone cannot enable cloud calls. The inactive status and HTTP 503 completion response were verified after the deploy reached Live. The PC worker alternative was removed and no PC model/worker was started. Ollama's [metered pricing](https://ollama.com/pricing) requires a separate deliberate activation decision; this deployment enables no AI billing.
 
