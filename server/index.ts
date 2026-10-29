@@ -15,6 +15,7 @@ import argon2 from "argon2";
 import { Server as SocketServer } from "socket.io";
 import { webcrypto } from "node:crypto";
 import { v2Services, clientMessageId, deliveryExpiry, liveWhere } from "./v2";
+import {groupServices} from './groups';
 
 import { InputError, base64, envelope, id, object, registration, username, encodeHistoryCursor, parseHistoryCursor } from "./validation";
 
@@ -111,6 +112,7 @@ export async function buildServer(env: NodeJS.ProcessEnv = process.env, database
     });
   }
   const v2=v2Services({app,database,io,authenticate,erasingUsers,activeSends,online});
+  const groups=groupServices({app,database,io,authenticate,erasingUsers,tracked:v2.tracked,ensureAvailable:v2.ensureAvailable});
   async function peerIds(userId:string) {
     const contacts=await database.contact.findMany({where:{status:"accepted",OR:[{userAId:userId},{userBId:userId}]},select:{userAId:true,userBId:true}});
     const peers=contacts.map(row=>row.userAId===userId?row.userBId:row.userAId);
@@ -257,25 +259,28 @@ export async function buildServer(env: NodeJS.ProcessEnv = process.env, database
     for (const controller of botRequests.get(userId) || []) controller.abort();
     try {
     await Promise.allSettled([...(activeSends.get(userId) || [])]);
-    let partners:string[] = [];
+    let partners:string[] = [],groupPartners:string[]=[];
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
-        partners = await database.$transaction(async (tx) => {
+        const erased = await database.$transaction(async (tx) => {
           const records = await tx.message.findMany({where:{OR:[{senderId:userId},{recipientId:userId}]},select:{senderId:true,recipientId:true},distinct:["senderId","recipientId"]});
           const contacts=await tx.contact.findMany({where:{OR:[{userAId:userId},{userBId:userId}]},select:{userAId:true,userBId:true}});
           const peers=[...new Set([...records.flatMap(m=>[m.senderId,m.recipientId]),...contacts.flatMap(c=>[c.userAId,c.userBId])].filter(peer=>peer!==userId))];
+          const groupPeers=await groups.prepareUserErasure(tx,userId);
           await tx.attachment.deleteMany({where:{OR:[{ownerId:userId},{recipientId:userId}]}});
           await tx.message.deleteMany({where:{OR:[{senderId:userId},{recipientId:userId}]}});
           await tx.session.deleteMany({where:{userId}});
           await tx.user.delete({where:{id:userId}});
-          return peers;
+          return {peers,groupPeers};
         },{isolationLevel:Prisma.TransactionIsolationLevel.Serializable});
+        partners=erased.peers;groupPartners=erased.groupPeers;
         break;
       } catch (error) {
         if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2034" || attempt === 2) throw error;
       }
     }
     for (const peer of partners) io.to(room(peer)).emit("peer:erased",{user_id:userId});
+    groups.updated(groupPartners);
     io.to(room(userId)).emit("account:erased",{user_id:userId});
     io.in(room(userId)).disconnectSockets(true);
     reply.clearCookie(COOKIE,{path:"/",secure,sameSite:"strict",httpOnly:true});

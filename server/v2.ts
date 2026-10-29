@@ -62,6 +62,7 @@ export function v2Services({app,database,io,authenticate,erasingUsers,activeSend
     // Server record UUIDs share client cache namespaces with logical IDs. New
     // deliveries cannot alias an existing record; valid old replays return above.
     if(data.client_message_id&&await tx.message.findFirst({where:{id:data.client_message_id},select:{id:true}}))throw new InputError('This delivery identifier is unavailable.');
+    if(data.client_message_id&&await tx.groupMessage.findFirst({where:{OR:[{id:data.client_message_id},{clientMessageId:data.client_message_id}]},select:{id:true}}))throw new InputError('This delivery identifier is unavailable.');
     const policyExpiry=expiresAt(contact?.ttlSeconds||0),deadline=requestedExpiry&&policyExpiry?new Date(Math.min(requestedExpiry.getTime(),policyExpiry.getTime())):requestedExpiry??policyExpiry;
     if(deadline&&deadline.getTime()<=Date.now())throw new InputError('This message expired and cannot be sent.');
     const message=await tx.message.create({data:{senderId,recipientId,clientMessageId:data.client_message_id,ciphertext:data.ciphertext,iv:data.iv,expiresAt:deadline,deliveredAt:senderId!==recipientId&&online(recipientId)?new Date():null}});

@@ -21,3 +21,7 @@
 .limit,.feedback{padding:8px 7px;margin:4px 0;font-size:11px;line-height:1.6;color:#c9b397;flex-shrink:0}
 .feedback{color:#e4ab99}
 @media(max-width:700px){.tabs.tabs{gap:23px}.tabs .optionsTrigger{width:22px;min-height:40px}.options button{min-height:43px;padding:10px}.chatRow{gap:5px}.checkbox{width:25px;height:25px;margin-left:3px}.checkedRow .conversation{padding-left:7px;padding-right:7px}.sectionBar{font-size:11px}}
+
+.gestureHelp{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;margin:0;padding:0}
+.chatRow{touch-action:pan-y}.conversation{-webkit-touch-callout:none}
+@media(pointer:coarse){.conversation{-webkit-user-select:none;user-select:none}}

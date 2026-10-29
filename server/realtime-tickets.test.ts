@@ -27,7 +27,7 @@ test('realtime tickets are opt-in opaque single-use capabilities with bounded se
 async function fixture(enabled=true){
  let active=true,expiry=new Date(Date.now()+60_000),owner=account;
  const session={findUnique:async()=>active?{id:sid,userId:owner,expiresAt:expiry}:null,deleteMany:async()=>{active=false;return{count:1};}};
- const database={session,contact:{findMany:async()=>[]},$transaction:async(fn:(tx:unknown)=>Promise<unknown>)=>fn({session,contact:{findMany:async()=>[]},message:{findMany:async()=>[],deleteMany:async()=>({count:0})},attachment:{deleteMany:async()=>({count:0})},user:{delete:async()=>({id:account})}}),$disconnect:async()=>{}} as unknown as PrismaClient;
+ const database={session,contact:{findMany:async()=>[]},$transaction:async(fn:(tx:unknown)=>Promise<unknown>)=>fn({$queryRaw:async()=>[],session,contact:{findMany:async()=>[]},message:{findMany:async()=>[],deleteMany:async()=>({count:0})},attachment:{deleteMany:async()=>({count:0})},user:{delete:async()=>({id:account})}}),$disconnect:async()=>{}} as unknown as PrismaClient;
  const built=await buildServer({...env,REALTIME_TICKETS:String(enabled)},database);
  const cookie=`${SESSION_COOKIE_NAME}=${built.app.jwt.sign({sub:account,sid},{expiresIn:60})}`;
  const headers={origin:env.CLIENT_ORIGIN!,cookie,'x-veilnivo-account':account};

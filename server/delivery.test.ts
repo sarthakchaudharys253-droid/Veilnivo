@@ -18,6 +18,7 @@ function harness(){
  tx.message.updateMany=async({where,data}:any)=>{const row=messages.get(where.id);if(!row||row.senderId!==where.senderId||row.revision!==where.revision||row.deletedAt)return{count:0};Object.assign(row,{...data,revision:row.revision+1});return{count:1};};
  tx.message.findUniqueOrThrow=async({where}:any)=>{const row=messages.get(where.id);if(!row)throw new Error('missing fixture');return row;};
  tx.attachment.deleteMany=async()=>({count:0});
+ tx.groupMessage={findFirst:async()=>null};
  const database:any={...tx,$transaction:async(fn:any)=>fn(tx)};
  const app:any={addHook:(_name:string,fn:any)=>hooks.push(fn)};
  for(const method of ['get','post','put','patch','delete'])app[method]=(path:string,...args:any[])=>routes.set(method+' '+path,args[args.length-1]);

@@ -1,8 +1,9 @@
 'use client';
-import {useEffect,useMemo,useRef,useState} from 'react';
-import {Archive,ArrowLeft,Check,CheckSquare,ChevronDown,Clock3,LockKeyhole,MessageSquare,Pin,Plus,Search,Settings2,ShieldCheck,Sparkles} from 'lucide-react';
+import {useEffect,useMemo,useRef,useState,type PointerEvent as ReactPointerEvent} from 'react';
+import {Archive,ArrowLeft,Check,ChevronDown,Clock3,LockKeyhole,MessageSquare,Pin,Plus,Search,Settings2,ShieldCheck,Sparkles} from 'lucide-react';
 import {useVeilnivo,type Conversation} from '@/lib/store';
 import {Avatar,IconButton} from './UI';
+import {ChatSelectionGesture,CHAT_SELECTION_HOLD_MS} from '@/lib/chat-selection-gestures';
 import {ChatHistoryDialog,ChatSelectionBar} from './ChatManagement';
 import styles from './ChatSidebar.module.css';
 
@@ -10,7 +11,7 @@ type Section='all'|'archived'|'locked';
 type Action='pin'|'unpin'|'archive'|'unarchive'|'delete'|'lock'|'unlock';
 interface Props {
  mobileHidden:boolean;nav:'messages'|'requests'|'security';
- onChoose:(contact:Conversation)=>void;onNew:(tab?:'invite'|'find')=>void;
+ onChoose:(contact:Conversation)=>void;onNew:(tab?:'invite'|'find'|'group')=>void;
  onSettings:()=>void;onConfigureLock:(ids:string[])=>void;onShowList:()=>void;onRequests:()=>void;
 }
 
@@ -20,6 +21,8 @@ export default function ChatSidebar({mobileHidden,nav,onChoose,onNew,onSettings,
  const [selecting,setSelecting]=useState(false),[selected,setSelected]=useState<string[]>([]);
  const [history,setHistory]=useState<{kind:'clear'|'delete';ids:string[];owner:string}|null>(null);
  const optionsRef=useRef<HTMLDivElement>(null);
+ const gesture=useRef(new ChatSelectionGesture()),holdTimer=useRef<ReturnType<typeof setTimeout>|undefined>(undefined);
+ const sidebarRef=useRef<HTMLElement>(null);
  const accessible=s.conversations.filter(contact=>!contact.hidden&&(!contact.locked||s.lockedChatsOpen));
  const peers=accessible.filter(contact=>!contact.isBot&&(s.chatSection==='locked'?contact.locked:s.chatSection==='archived'?contact.archived&&!contact.locked:!contact.archived&&!contact.locked));
  const assistant=s.chatSection!=='archived'?s.conversations.find(contact=>contact.isBot&&(s.preferences.aiEnabled||s.hasChatLockCode)):undefined;
@@ -40,7 +43,16 @@ export default function ChatSidebar({mobileHidden,nav,onChoose,onNew,onSettings,
  useEffect(()=>{const ids=new Set(accessible.filter(contact=>!contact.isBot).map(contact=>contact.id));setSelected(previous=>{const next=previous.filter(id=>ids.has(id));return next.length===previous.length?previous:next})},[selectionKey]);
  useEffect(()=>{if(!options)return;const outside=(event:PointerEvent)=>{if(event.target instanceof Node&&!optionsRef.current?.contains(event.target))setOptions(false)};const escape=(event:KeyboardEvent)=>{if(event.key==='Escape')setOptions(false)};document.addEventListener('pointerdown',outside);document.addEventListener('keydown',escape);return()=>{document.removeEventListener('pointerdown',outside);document.removeEventListener('keydown',escape)}},[options]);
 
- function toggle(id:string){setSelected(previous=>previous.includes(id)?previous.filter(value=>value!==id):[...previous,id])}
+ function stopHoldTimer(){if(holdTimer.current!==undefined)clearTimeout(holdTimer.current);holdTimer.current=undefined}
+ function cancelHold(){stopHoldTimer();gesture.current.cancel(Date.now())}
+ useEffect(()=>{cancelHold()},[s.user?.id,s.chatSection,s.lockedChatsOpen,s.busy,mobileHidden,nav,query,unreadOnly]);
+ useEffect(()=>{const secondary=(event:PointerEvent)=>{if(event.pointerType==='touch'&&!event.isPrimary)cancelHold()};const hide=()=>{if(document.visibilityState!=='visible')cancelHold()};document.addEventListener('pointerdown',secondary,true);document.addEventListener('scroll',cancelHold,true);document.addEventListener('visibilitychange',hide);window.addEventListener('blur',cancelHold);return()=>{cancelHold();document.removeEventListener('pointerdown',secondary,true);document.removeEventListener('scroll',cancelHold,true);document.removeEventListener('visibilitychange',hide);window.removeEventListener('blur',cancelHold)}},[]);
+ function canSelect(id:string,owner=s.user?.id,section=s.chatSection){const current=useVeilnivo.getState(),contact=current.conversations.find(row=>row.id===id);return!!owner&&current.user?.id===owner&&current.chatSection===section&&!current.busy&&!!sidebarRef.current?.getClientRects().length&&!!contact&&!contact.isBot&&!contact.hidden&&(!contact.locked||current.lockedChatsOpen)}
+ function enterSelection(id:string){if(!canSelect(id))return;setSelecting(true);setOptions(false);setSelected(previous=>previous.includes(id)?previous:[...previous,id]);onShowList()}
+ function touchStart(event:ReactPointerEvent<HTMLDivElement>,contact:Conversation){cancelHold();if(selecting||contact.isBot||!canSelect(contact.id))return;const owner=s.user?.id,section=s.chatSection;if(!gesture.current.begin({id:contact.id,pointerId:event.pointerId,pointerType:event.pointerType,x:event.clientX,y:event.clientY,time:Date.now(),primary:event.isPrimary,button:event.button}))return;holdTimer.current=setTimeout(()=>{holdTimer.current=undefined;if(!canSelect(contact.id,owner,section)){cancelHold();return}const id=gesture.current.hold(Date.now());if(id)enterSelection(id)},CHAT_SELECTION_HOLD_MS)}
+ function touchMove(event:ReactPointerEvent<HTMLDivElement>){if(gesture.current.move(event.pointerId,event.clientX,event.clientY))stopHoldTimer()}
+ function touchEnd(event:ReactPointerEvent<HTMLDivElement>){stopHoldTimer();gesture.current.finish(event.pointerId,Date.now())}
+ function toggle(id:string){if(!canSelect(id))return;setSelected(previous=>previous.includes(id)?previous.filter(value=>value!==id):[...previous,id])}
  function cancelSelection(){setSelected([]);setSelecting(false)}
  function section(value:Section){setOptions(false);setUnreadOnly(false);s.setChatSection(value);onShowList()}
  function selectAll(){setSelecting(true);setOptions(false);setSelected(previous=>everyShownSelected?previous.filter(id=>!shown.some(contact=>contact.id===id)):[...new Set([...previous,...shown.map(contact=>contact.id)])])}
@@ -53,21 +65,22 @@ export default function ChatSidebar({mobileHidden,nav,onChoose,onNew,onSettings,
  async function finishHistory(){const action=history,current=useVeilnivo.getState();if(!action||current.busy||current.user?.id!==action.owner)return;const ok=action.kind==='clear'?await current.clearChats(action.ids):await current.organizeChats(action.ids,'delete');if(ok&&useVeilnivo.getState().user?.id===action.owner){setHistory(null);cancelSelection()}}
  function row(contact:Conversation){
   const checked=selected.includes(contact.id);
-  return <div className={`${styles.chatRow} ${checked?styles.checkedRow:''}`} key={contact.id}>
+  return <div className={`${styles.chatRow} ${checked?styles.checkedRow:''}`} key={contact.id} onPointerDown={event=>touchStart(event,contact)} onPointerMove={touchMove} onPointerUp={touchEnd} onPointerCancel={cancelHold} onContextMenu={event=>{if(contact.isBot)return;event.preventDefault();stopHoldTimer();gesture.current.nativeHold(contact.id,Date.now());enterSelection(contact.id)}} onClickCapture={event=>{if(gesture.current.suppressClick(contact.id,Date.now())){event.preventDefault();event.stopPropagation()}}}>
    {selecting&&!contact.isBot&&<button type="button" role="checkbox" aria-checked={checked} aria-label={`${checked?'Deselect':'Select'} chat with @${contact.username}`} className={styles.checkbox} onClick={()=>toggle(contact.id)} disabled={s.busy}>{checked&&<Check size={14}/>}</button>}
-   <button className={`conversation ${s.activeId===contact.id&&nav==='messages'?'selected':''} ${contact.isBot?'bot-contact':''} ${styles.conversation}`} onClick={()=>{if(selecting&&!contact.isBot)toggle(contact.id);else{cancelSelection();onChoose(contact)}}}>
+   <button className={`conversation ${s.activeId===contact.id&&nav==='messages'?'selected':''} ${contact.isBot?'bot-contact':''} ${styles.conversation}`} aria-describedby={contact.isBot?undefined:'chat-selection-instructions'} onKeyDown={event=>{if(!contact.isBot&&(event.key==='ContextMenu'||event.key==='F10'&&event.shiftKey)){event.preventDefault();cancelHold();enterSelection(contact.id)}}} onClick={()=>{if(selecting&&!contact.isBot)toggle(contact.id);else{cancelSelection();onChoose(contact)}}}>
     <Avatar contact={contact}/><div className="conversation-copy"><div className="conversation-top"><strong>{contact.name}{contact.verified&&<ShieldCheck size={12}/>}</strong><time>{contact.isBot?<span className="bot-chip">AI</span>:contact.pinned?<Pin size={13} aria-label="Pinned chat"/>:contact.time||''}</time></div><div className="conversation-bottom"><p>{contact.blocked?'Blocked contact':contact.requestStatus==='outgoing'?'Connection request sent':contact.preview||'Start a private conversation'}</p>{contact.unread>0&&<span className="unread-count">{contact.unread}</span>}{contact.locked?<LockKeyhole size={13}/>:contact.archived?<Archive size={13}/>:contact.ttlSeconds?<Clock3 size={13}/>:null}</div></div>
    </button>
   </div>;
  }
 
  if(!s.user)return null;
- return <aside className={`sidebar ${mobileHidden?'mobile-hidden':''}`} aria-label="Conversations">
-  <div className="sidebar-title"><h1>{title}<span>{peers.length}</span></h1><div className="sidebar-title-actions">{s.chatSection!=='all'&&<IconButton title="Back to all chats" onClick={()=>section('all')}><ArrowLeft size={18}/></IconButton>}<IconButton title="Find user" onClick={()=>onNew('find')}><Search size={18}/></IconButton><IconButton title="New conversation" onClick={()=>onNew()}><Plus size={20}/></IconButton></div></div>
+ return <aside ref={sidebarRef} className={`sidebar ${mobileHidden?'mobile-hidden':''}`} aria-label="Conversations">
+  <div className="sidebar-title"><h1>{title}<span>{peers.length}</span></h1><div className="sidebar-title-actions">{s.chatSection!=='all'&&<IconButton title="Back to all chats" onClick={()=>section('all')}><ArrowLeft size={18}/></IconButton>}<IconButton title="Find user" onClick={()=>onNew('find')}><Search size={18}/></IconButton><IconButton title="New conversation" onClick={()=>onNew('group')}><Plus size={20}/></IconButton></div></div>
   <div className="search-box"><Search size={16}/><input aria-label="Search conversations" placeholder="Search conversations" value={query} onChange={event=>setQuery(event.target.value)}/><kbd>Ctrl K</kbd></div>
+  <p id="chat-selection-instructions" className={styles.gestureHelp}>Touch and hold a chat, or right-click it, to select chats. Keyboard users can press Shift+F10. Then tap a chat or click its checkbox to toggle selection.</p>
   <div className={`conversation-tabs ${styles.tabs}`}>
    <div className={styles.allGroup} ref={optionsRef}><button onClick={()=>{section('all');setUnreadOnly(false)}} className={s.chatSection==='all'&&!unreadOnly&&nav==='messages'?'selected':''}>All chats</button><button type="button" className={styles.optionsTrigger} aria-label="All chats options" aria-haspopup="menu" aria-expanded={options} onClick={()=>setOptions(value=>!value)}><ChevronDown size={14}/></button>
-    {options&&<div className={styles.options} role="menu" aria-label="Chat list options"><button role="menuitem" onClick={()=>{setSelecting(true);setOptions(false);onShowList()}}><CheckSquare size={15}/>Select chats</button><button role="menuitem" onClick={selectAll}><CheckSquare size={15}/>{everyShownSelected?'Deselect this list':'Select all in this list'}</button><button role="menuitem" onClick={()=>section('archived')}><Archive size={15}/>Archived chats{archivedCount>0&&<span>{archivedCount}</span>}</button></div>}
+    {options&&<div className={styles.options} role="menu" aria-label="Chat list options"><button role="menuitem" onClick={()=>section('archived')}><Archive size={15}/>Archived chats{archivedCount>0&&<span>{archivedCount}</span>}</button></div>}
    </div>
    <button onClick={()=>{if(s.chatSection!=='all')s.setChatSection('all');setUnreadOnly(true);onShowList()}} className={s.chatSection==='all'&&unreadOnly&&nav==='messages'?'selected':''}>Unread{unread>0&&<span>{unread}</span>}</button>
    <button className={nav==='requests'?'selected':''} onClick={onRequests}>Requests{incoming.length>0&&<span>{incoming.length}</span>}</button>

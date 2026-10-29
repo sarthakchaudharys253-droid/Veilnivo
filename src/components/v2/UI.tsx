@@ -1,10 +1,10 @@
 'use client';
 import {useEffect,useRef,type ReactNode} from 'react';
-import {X} from 'lucide-react';
+import {Users,X} from 'lucide-react';
 import type {Conversation} from '@/lib/store';
 export function VeilMark({size=26}:{size?:number}) {return <svg width={size} height={size} viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M5.5 7.5 16 26 26.5 7.5" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"/><path d="M8.5 8.5c4-3 11-3 15 0M11 12c3-2 7-2 10 0" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" opacity=".7"/></svg>}
 const colors:Record<string,string>={mint:'#b9dbc5',blue:'#b7c9e4',rose:'#dfb7c1',amber:'#dbc49a',violet:'#bdb4de'};
-export function Avatar({contact,small=false}:{contact:Pick<Conversation,'color'|'initials'|'isBot'|'online'>,small?:boolean}) {return <span className={`avatar ${small?'small':''} ${contact.isBot?'bot-avatar':''}`} style={{'--avatar-color':colors[contact.color]||contact.color} as React.CSSProperties}>{contact.isBot?<VeilMark size={small?21:27}/>:contact.initials}{contact.online&&!contact.isBot&&<i className="online-dot"/>}</span>}
+export function Avatar({contact,small=false}:{contact:Pick<Conversation,'color'|'initials'|'isBot'|'online'|'isGroup'>,small?:boolean}) {return <span className={`avatar ${small?'small':''} ${contact.isBot?'bot-avatar':''}`} style={{'--avatar-color':colors[contact.color]||contact.color} as React.CSSProperties}>{contact.isBot?<VeilMark size={small?21:27}/>:contact.isGroup?<Users size={small?17:21}/>:contact.initials}{contact.online&&!contact.isBot&&<i className="online-dot"/>}</span>}
 export function IconButton({title,children,onClick,active=false,className='',disabled=false}:{title:string,children:ReactNode,onClick:()=>void,active?:boolean,className?:string,disabled?:boolean}) {return <button type="button" title={title} aria-label={title} onClick={onClick} disabled={disabled} className={`icon-button ${active?'active':''} ${className}`}>{children}</button>}
 export function Dialog({title,children,onClose,wide=false}:{title:string,children:ReactNode,onClose:()=>void,wide?:boolean}) {
  const ref=useRef<HTMLDivElement>(null);const closer=useRef(onClose);closer.current=onClose;

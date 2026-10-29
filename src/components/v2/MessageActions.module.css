@@ -27,3 +27,5 @@
 .quickReactions>button:hover,.quickReactions>button:focus-visible{background:#37563f;outline:2px solid #91ba9d;outline-offset:-2px}
 @media(pointer:coarse){.bubble{-webkit-user-select:none;user-select:none}}
 @media(prefers-reduced-motion:reduce){.bubble,.swipeHint{transition:none}}
+
+.author{font-size:10px;line-height:1.5;font-weight:550;color:#abcab7;margin:0 0 7px;overflow-wrap:anywhere}

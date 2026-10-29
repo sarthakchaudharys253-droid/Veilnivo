@@ -32,6 +32,10 @@ model User {
   aliases             Alias[]
   sentNonces          SendNonce[] @relation("NonceSender")
   receivedNonces      SendNonce[] @relation("NonceRecipient")
+  ownedGroups         Group[] @relation("GroupOwner")
+  groupMemberships    GroupMember[]
+  groupKeys           GroupKeyEnvelope[] @relation("GroupKeyRecipient")
+  groupMessages       GroupMessage[]
 }
 
 model Session {
@@ -150,4 +154,62 @@ model SendNonce {
   @@unique([senderId,clientMessageId])
   @@index([recipientId])
   @@index([clientMessageId])
+}
+
+model Group {
+  id            String @id
+  name          String
+  ownerId       String
+  keyVersion    Int @default(1)
+  needsRekey    Boolean @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  lastMessageAt DateTime?
+  owner         User @relation("GroupOwner", fields:[ownerId], references:[id], onDelete:Cascade)
+  members       GroupMember[]
+  keys          GroupKeyEnvelope[]
+  messages      GroupMessage[]
+  @@index([ownerId])
+}
+
+model GroupMember {
+  groupId       String
+  userId        String
+  joinedVersion Int
+  joinedAt      DateTime @default(now())
+  group         Group @relation(fields:[groupId], references:[id], onDelete:Cascade)
+  user          User @relation(fields:[userId], references:[id], onDelete:Cascade)
+  @@id([groupId,userId])
+  @@index([userId,groupId])
+}
+
+model GroupKeyEnvelope {
+  groupId    String
+  keyVersion Int
+  userId     String
+  wrappedById String
+  wrappedByPublicKeyJwk String
+  ciphertext String
+  iv         String
+  group      Group @relation(fields:[groupId], references:[id], onDelete:Cascade)
+  user       User @relation("GroupKeyRecipient", fields:[userId], references:[id], onDelete:Cascade)
+  @@id([groupId,keyVersion,userId])
+  @@index([userId,groupId,keyVersion])
+  @@index([wrappedById])
+}
+
+model GroupMessage {
+  id              String @id @default(uuid())
+  groupId         String
+  senderId        String
+  clientMessageId String
+  keyVersion      Int
+  ciphertext      String
+  iv              String
+  createdAt       DateTime @default(now())
+  group           Group @relation(fields:[groupId], references:[id], onDelete:Cascade)
+  sender          User @relation(fields:[senderId], references:[id], onDelete:Cascade)
+  @@unique([senderId,clientMessageId])
+  @@index([groupId,createdAt,id])
+  @@index([groupId,keyVersion])
 }
