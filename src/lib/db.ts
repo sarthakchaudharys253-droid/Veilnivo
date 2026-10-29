@@ -1,7 +1,7 @@
 import { CLIENT_DATABASE_NAME } from './compat';
 import Dexie, { type Table } from 'dexie';
 export interface CachedAccount { id:string;username:string;authDigest:string;auth_salt:string;wrap_salt:string;wrap_iv:string;public_key:JsonWebKey;encrypted_private_key:string }
-export interface CachedMessage {cacheId:string;id:string;ownerId:string;peerId:string;ciphertext:string;iv:string;createdAt:number;expiresAt?:number;status?:string;serverId?:string;attachmentId?:string;paused?:boolean;revision?:number;deletedAt?:number;senderId?:string;readAt?:number}
+export interface CachedMessage {cacheId:string;id:string;ownerId:string;peerId:string;ciphertext:string;iv:string;createdAt:number;expiresAt?:number;status?:string;serverId?:string;attachmentId?:string;paused?:boolean;revision?:number;deletedAt?:number;senderId?:string;readAt?:number;serverCreatedAt?:number}
 export interface CachedContact {cacheId:string;ownerId:string;peerId:string;username:string;publicKeyJwk:JsonWebKey;ttlSeconds?:number;blocked?:boolean;requestStatus?:'accepted'|'outgoing'}
 export interface CachedRequest {id:string;fromId:string;toId:string;fromUsername:string;toUsername:string;fromKey:JsonWebKey;toKey:JsonWebKey;status:'pending'|'accepted'|'declined';createdAt:number}
 export interface CachedInvite {id:string;tokenHash:string;ownerId:string;username:string;publicKeyJwk:JsonWebKey;expiresAt:number;usedAt?:number;revokedAt?:number}

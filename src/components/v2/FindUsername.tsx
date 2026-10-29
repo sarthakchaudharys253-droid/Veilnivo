@@ -8,7 +8,7 @@ export function FindUsername({onClose,onOpened,onRequests}:{onClose:()=>void;onO
  const [username,setUsername]=useState(''),[results,setResults]=useState<UserSearchResult[]|null>(null),[searching,setSearching]=useState(false),[sending,setSending]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
  const current=useRef(0),controller=useRef<AbortController|null>(null),mounted=useRef(true);
  useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;current.current++;controller.current?.abort();}},[]);
- const visible=results?.filter(result=>!s.blockedContacts.some(contact=>contact.id===result.id));
+ const visible=results?.filter(result=>!s.blockedContacts.some(contact=>contact.id===result.id)&&!s.conversations.some(contact=>contact.id===result.id&&(contact.hidden||contact.locked&&!s.lockedChatsOpen)));
  function edit(value:string){current.current++;controller.current?.abort();setUsername(value.replace(/^@/,'').toLowerCase());setResults(null);setSearching(false);setError('');setNotice('');}
  async function search(event:FormEvent){
   event.preventDefault();controller.current?.abort();const task=++current.current,accountId=s.user?.id,request=new AbortController();controller.current=request;setSearching(true);setResults(null);setError('');setNotice('');s.clearError();
@@ -18,7 +18,7 @@ export function FindUsername({onClose,onOpened,onRequests}:{onClose:()=>void;onO
  }
  function open(result:UserSearchResult){
   const state=useVeilnivo.getState();if(state.user?.id!==s.user?.id)return;
-  const contact=state.conversations.find(contact=>contact.id===result.id&&!contact.blocked);
+  const contact=state.conversations.find(contact=>contact.id===result.id&&!contact.blocked&&!contact.hidden&&(!contact.locked||state.lockedChatsOpen));
   if(!contact){setError('This conversation changed. Search again to refresh its status.');setResults(null);return;}
   state.selectChat(contact.id);onOpened();onClose();
  }

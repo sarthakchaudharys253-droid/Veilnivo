@@ -1,0 +1,23 @@
+.tabs.tabs{gap:20px;position:relative;overflow:visible}
+.allGroup{display:flex;position:relative;min-width:0;align-items:stretch;gap:3px}
+.tabs .optionsTrigger{width:23px;padding:0;display:grid;place-items:center;color:#91b09c}
+.tabs .optionsTrigger:after{display:none}
+.options{position:absolute;left:0;top:100%;width:226px;z-index:24;background:#1b2b21;border:1px solid #47644e;border-radius:9px;padding:5px;box-shadow:0 12px 32px #0006}
+.options button{display:flex;align-items:center;gap:9px;width:100%;min-height:39px;padding:10px;text-align:left;border-radius:5px;color:#c1dbc9;font-size:12px}
+.options button:hover,.options button:focus-visible{background:#2b4934;outline:none}
+.options button:after{display:none}
+.options button>span{margin-left:auto;padding:1px 5px;border-radius:4px;background:#34533e}
+.chatRow{display:flex;align-items:center;gap:7px;min-width:0}
+.conversation{flex:1;min-width:0}
+.checkbox{width:24px;height:24px;display:grid;place-items:center;flex-shrink:0;border:1px solid #5c8066;border-radius:6px;color:#d2efdc;background:#15251b;margin-left:5px}
+.checkbox[aria-checked=true]{background:#456e50;border-color:#8fbd9c}
+.checkedRow .conversation{background:#233d2c;border-color:#51775b}
+.sectionBar{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:36px;padding:7px 6px;color:#a3c2ae;font-size:11px;flex-shrink:0}
+.sectionBar>button{display:flex;align-items:center;gap:5px;color:#c7e4d1;font-size:11px;padding:5px}
+.selectAll{display:flex;align-items:center;justify-content:space-between;gap:7px;padding:8px 4px 0;font-size:10px;color:#87a791;flex-shrink:0}
+.selectAll>button{color:#c1dfcb;padding:5px 0;font-size:11px}
+.selectionHint{display:flex;align-items:center;justify-content:space-between;gap:7px;padding:10px 4px;font-size:11px;color:#a9c8b4;border-bottom:1px solid #38513f}
+.selectionHint>button{color:#c5e3cf;padding:5px}
+.limit,.feedback{padding:8px 7px;margin:4px 0;font-size:11px;line-height:1.6;color:#c9b397;flex-shrink:0}
+.feedback{color:#e4ab99}
+@media(max-width:700px){.tabs.tabs{gap:23px}.tabs .optionsTrigger{width:22px;min-height:40px}.options button{min-height:43px;padding:10px}.chatRow{gap:5px}.checkbox{width:25px;height:25px;margin-left:3px}.checkedRow .conversation{padding-left:7px;padding-right:7px}.sectionBar{font-size:11px}}

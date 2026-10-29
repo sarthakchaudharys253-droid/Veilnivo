@@ -27,6 +27,7 @@ body{font-family:'Segoe UI',Arial,Helvetica,sans-serif;font-size:14px}.global-he
 @media(max-width:700px){.user-search-card{padding:15px;gap:11px}.search-user-avatar{height:36px;width:36px;font-size:12px}.search-user-copy>strong{font-size:14px}.search-user-copy>.primary-button{font-size:11px;padding:10px 12px}.sidebar-title-actions{gap:1px}}
 
 /* Keep the mobile conversation controls compact without shrinking tap targets. */
+.composer>.chat-code-input{min-width:0;flex:1;align-self:center;height:26px;padding:3px 0;background:transparent;border:0;color:var(--text);font-size:16px;line-height:21px;outline:none}
 @media(max-width:700px){
  .sidebar-title{height:48px;min-height:48px;flex-shrink:0;padding:2px 4px}
  .sidebar-title h1{font-size:20px;line-height:1.2;gap:8px}

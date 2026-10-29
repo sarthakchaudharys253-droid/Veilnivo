@@ -10,6 +10,7 @@ A dark, two-pane encrypted messenger built with Next.js App Router, TypeScript, 
 - Message requests, explicit acceptance/decline, blocking and unblocking. No public username directory.
 - Exact username and alias search with a result preview before sending a request. Existing connections open a chat; incoming requests open the review screen. Search is authenticated, rate limited, and hides blocked identities.
 - Message selection, editing, forwarding, replies, encrypted emoji reactions, local message/file-name search, explicit send states and an encrypted, idempotent outbox.
+- Chat selection with bulk pin/unpin, archive/unarchive, local clear/delete, and chat lock. Free supports 3 pinned peer chats; Plus is planned to support 10.
 - Standard chat typing with your phone's keyboard or laptop keyboard, alongside the searchable emoji picker.
 - Searchable native emoji picker with all 3,944 Unicode 17 emoji, nine categories, skin-tone and mixed-tone variants, and session-only recent emoji. It loads when opened and inserts at the cursor without replacing the rest of a draft. Emoji designs follow the device font.
 - Off / 1 hour / 24 hours / 7 days message timers. New messages use the selected timer; existing messages retain theirs.
@@ -43,6 +44,18 @@ Forwarding creates a fresh encrypted message for each recipient, with a Forwarde
 
 Touch the chat composer to type with your phone's normal keyboard, or use your laptop keyboard. Paste and input methods use the browser's standard text field behavior. The emoji button still opens the searchable emoji picker. The earlier website keyboard has been removed at the user's request.
 
+## Organizing and locking chats
+
+Open the arrow beside All chats to select chats, select the current list, or open Archived chats. Selection has no fixed chat-count limit. Pin, unpin, archive, unarchive, lock, clear or delete the selected conversations. Free allows 3 pinned peer chats across this device's inbox. Archive preserves the conversation and its messages. Clear chat is also available in the conversation menu above Block contact; it clears messages while keeping the conversation. Delete removes the conversation from this device's list until a new message brings it back. Other people and other devices retain their copies.
+
+Chat organization is saved in the account's encrypted browser settings on this device. Clear/delete actions also remove the affected local cached messages, attachments and queued sends, and retain local clear markers so old server history does not return on an ordinary reload. They do not delete the server's encrypted message records or another participant's data, and organization does not synchronize to another device.
+
+Set a secret code in Settings → Chat lock, confirm it, and choose conversations to lock. A code can contain 4–12 Unicode characters, counted as grapheme clusters so a joined emoji counts as one. Letters, numbers, symbols, spaces and emoji work; the code is checked exactly, without trimming or normalization. Send the code to Veil AI to open the locked section. When a code is configured and the section is closed, Veil AI submissions are treated as local unlock attempts before any assistant consent, history, outbox or provider request. Local unlocking stays available even when the assistant is off.
+
+Leaving the locked section, backgrounding the page, or locking/signing out of the account closes it. Locked conversation names and previews stay out of the ordinary chat list and search. Chat lock is a local interface guard inside an already unlocked account, not a separate message-encryption identity or a new server-side protection boundary.
+
+Forgot chat-lock code opens a second confirmation. Confirming clears messages and queued sends for all locked conversations on this device, removes the code, unlocks and unarchives those chats, and returns to All chats. It does not recover the old code, clear another person's messages, or erase the server copy.
+
 ## Production backend
 
 [Veilnivo is live on Netlify](https://veilnivo.netlify.app/) with its [Render API](https://veilnivo-api-free.onrender.com/api/ready) and PostgreSQL database connected. Public verification covered browser sign-in, exact username search, connection requests, bidirectional encrypted messaging with an independent WebCrypto client, and decryption of saved history. See [VERIFICATION.md](VERIFICATION.md) for the release record and test limits.
@@ -75,7 +88,7 @@ Erase drops keys/sockets, clears localStorage/sessionStorage and origin IndexedD
 
 ## Pricing and pilot
 
-The $4/month Plus card is a pricing hypothesis, not an active subscription. No checkout or payment collection is implemented. Core messaging, encryption, blocking, timers and erase controls are not paywalled. Preview aliases/colors are available for evaluation; larger attachments are not advertised as working.
+The $4/month Plus card is a planned subscription, not an active purchase. Free currently allows 3 pinned chats; the shown Plus limit of 10 becomes available only when a real subscription integration launches. No checkout, payment collection, paid activation switch or active Plus entitlement is implemented. Core messaging, encryption, chat lock, archiving, blocking, timers and erase controls are not paywalled. Preview aliases/colors are available for evaluation; larger attachments are not advertised as working.
 
 Use [PILOT.md](PILOT.md) for a 20-user research workflow. The app's feedback form keeps answers in memory and exports a user-controlled JSON file; it sends nothing automatically. No participants have been contacted and no market demand is claimed.
 
