@@ -1,6 +1,6 @@
 # Netlify frontend and free Render backend
 
-The free beta is deployed at [veilnivo.netlify.app](https://veilnivo.netlify.app/) with its [Render backend](https://veilnivo-api-free.onrender.com/api/ready) and PostgreSQL connected. The latest 29 October 2026 release restores a normal Veil AI conversation with a native textarea and Powered by Ollama attribution. Ollama Cloud is selected but explicitly inactive; no live inference is enabled. Only the exact configured secret code opens locked chats locally. All 179 regression checks and the production build passed. Public checks confirmed the inactive API gate, desktop/phone interface and absence of a message after an inactive question. See [VERIFICATION.md](VERIFICATION.md) for the precise scope and earlier group/message checks.
+The free beta is deployed at [veilnivo.netlify.app](https://veilnivo.netlify.app/) with its [Render backend](https://veilnivo-api-free.onrender.com/api/ready) and PostgreSQL connected. The latest 29 October 2026 frontend release adds public Privacy, Terms, Acceptable use, Contact & safety and Legal overview pages. The operator-supplied contact email is public; the notices explain signup without phone/email, encrypted content and visible metadata, essential storage, deletion scopes, inactive AI, voluntary reports and valid legal requests. They do not introduce AI chat scanning or certify legal compliance. Production build, export checks and public navigation passed. The backend remains on the inactive Ollama Cloud release, whose 179 regression checks previously passed. See [VERIFICATION.md](VERIFICATION.md) for precise coverage.
 
 ## Current deployment record
 
@@ -10,13 +10,13 @@ The free beta is deployed at [veilnivo.netlify.app](https://veilnivo.netlify.app
 | Public backend | https://veilnivo-api-free.onrender.com |
 | Source | https://github.com/sarthakchaudharys253-droid/Veilnivo |
 | Backend source commit | `bee20298a873b5982d07fc3e50fa1e5efd5390ce` |
-| Frontend source commit | `bee20298a873b5982d07fc3e50fa1e5efd5390ce` |
+| Frontend source commit | `6ad30595bc89c384b122549b8318509d4d261343` |
 | Render workspace | My Workspace, `tea-dbfikelg1s2s73fvboag` |
 | Render Blueprint | `veilnivo-netlify-free` |
 | Render web service | `veilnivo-api-free`, `srv-dbg80dmc6qcc73ekou90` |
 | Verified Live backend deploy | `dep-dbhf9em1egvs73fdtua0` at `2026-10-29T07:27:00.986895Z` |
 | Render database | `veilnivo-db-free`, `dpg-dbg7spl9fdbs73d1ms7g-a` |
-| Published Netlify deploy | `6ae2f4d0b1793301da8c2828`, 29 October 2026, 12:55 PM IST |
+| Published Netlify deploy | `6ae3377c11cc9f8eacec16aa`, 29 October 2026, 5:39 PM IST |
 | Database expiry | **26 November 2026, 4:05 PM IST** (`2026-11-26T10:35:18.553914Z`) |
 
 Both Render resources use Free plans in Singapore. The existing database was associated with the Blueprint, preserving that resource. Later documentation/build-helper updates do not change the source commit recorded for the verified release above.

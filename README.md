@@ -41,6 +41,8 @@ With neither `NEXT_PUBLIC_API_MODE` nor `NEXT_PUBLIC_API_URL` configured, the ap
 
 For a clean local account workspace, open `/login/` and create an identity. Real account workspaces start empty except the optional assistant. Lock and sign in again to restore encrypted history. Prior v1 local identities are migrated on successful login.
 
+Create identity includes a required Confirm password field directly below Password. Both entries must match exactly, including spaces, before registration starts. The confirmation stays in form memory and is not sent to the backend or saved; sign-in uses one password field.
+
 ## Message controls
 
 Press and hold a message, right-click it, or use the dots inside its bubble to reply, react, select, forward, edit an own sent message, or delete. The dots sit at the top right of your messages and the top left of received messages; your menu includes Edit message. Double-click a message to open the full emoji reaction picker. On touch screens, swipe a received message from left to right or an own message from right to left to reply. Selection supports up to 50 messages; forwarding supports up to five accepted contacts and 50 copies per operation.
