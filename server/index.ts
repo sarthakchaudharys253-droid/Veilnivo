@@ -18,6 +18,7 @@ import { v2Services, clientMessageId, deliveryExpiry, liveWhere } from "./v2";
 import {groupServices} from './groups';
 import {createAiProvider,AiProviderError,type AiProviderSession} from './ai-provider';
 import {latestConversationMessages} from './conversation-snapshots';
+import {migrationReadOnly,registerMigration} from './migration';
 
 import { InputError, base64, envelope, id, object, registration, username, encodeHistoryCursor, parseHistoryCursor } from "./validation";
 
@@ -38,7 +39,7 @@ export async function buildServer(env: NodeJS.ProcessEnv = process.env, database
   const io = new SocketServer(app.server, {
     cors:{origin, credentials:true, methods:["GET","POST","PUT","PATCH","DELETE"]},
     maxHttpBufferSize:192 * 1024,
-    allowRequest:(request, callback) => callback(null, request.headers.origin === origin),
+    allowRequest:(request, callback) => callback(null, !migrationReadOnly(env) && request.headers.origin === origin),
     transports:["websocket"],
   });
   const aiProvider=createAiProvider(env);
@@ -48,6 +49,7 @@ export async function buildServer(env: NodeJS.ProcessEnv = process.env, database
   // The IP limiter is transient process memory and does not log request bodies.
   await app.register(rateLimit, {max:180,timeWindow:"1 minute"});
   app.decorateRequest("principal", null as unknown as Principal);
+  registerMigration(app,database,env);
   app.addHook("onRequest", async (request, reply) => {
     reply.header("Cache-Control", "no-store");
     reply.header("X-Content-Type-Options", "nosniff");
@@ -114,7 +116,7 @@ export async function buildServer(env: NodeJS.ProcessEnv = process.env, database
       return realtimeTickets.issue(request.principal);
     });
   }
-  const v2=v2Services({app,database,io,authenticate,erasingUsers,activeSends,online});
+  const v2=v2Services({app,database,io,authenticate,erasingUsers,activeSends,online,scheduleCleanup:!migrationReadOnly(env)});
   const groups=groupServices({app,database,io,authenticate,erasingUsers,tracked:v2.tracked,ensureAvailable:v2.ensureAvailable});
   async function peerIds(userId:string) {
     const contacts=await database.contact.findMany({where:{status:"accepted",OR:[{userAId:userId},{userBId:userId}]},select:{userAId:true,userBId:true}});

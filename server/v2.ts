@@ -37,8 +37,8 @@ export function messageDeletionWindow(now:Prisma.Sql=Prisma.sql`(clock_timestamp
 }
 const DELETE_WINDOW_ERROR='Delete for everyone is available only for 30 minutes after the message is first read.';
 
-interface Options {app:FastifyInstance;database:PrismaClient;io:Server;authenticate:(request:FastifyRequest)=>Promise<void>;erasingUsers:Set<string>;activeSends:Map<string,Set<Promise<void>>>;online:(id:string)=>boolean}
-export function v2Services({app,database,io,authenticate,erasingUsers,activeSends,online}:Options){
+interface Options {app:FastifyInstance;database:PrismaClient;io:Server;authenticate:(request:FastifyRequest)=>Promise<void>;erasingUsers:Set<string>;activeSends:Map<string,Set<Promise<void>>>;online:(id:string)=>boolean;scheduleCleanup?:boolean}
+export function v2Services({app,database,io,authenticate,erasingUsers,activeSends,online,scheduleCleanup=true}:Options){
  const room=(userId:string)=>`user:${userId}`;
  const peer=(user:{id:string;username:string;publicKeyJwk:string})=>({id:user.id,username:user.username,public_key:JSON.parse(user.publicKeyJwk),online:online(user.id)});
  async function blocked(a:string,b:string,tx:Db=database){return !!await tx.block.findFirst({where:{OR:[{blockerId:a,blockedId:b},{blockerId:b,blockedId:a}]},select:{id:true}});}
@@ -215,6 +215,6 @@ export function v2Services({app,database,io,authenticate,erasingUsers,activeSend
   const pending=runCleanup();cleanupPending=pending;
   try{await pending}finally{if(cleanupPending===pending)cleanupPending=undefined}
  }
- const cleanupTimer=setInterval(()=>{void cleanupExpired().catch(()=>undefined);},30_000);cleanupTimer.unref();app.addHook('onClose',async()=>clearInterval(cleanupTimer));
+ if(scheduleCleanup){const cleanupTimer=setInterval(()=>{void cleanupExpired().catch(()=>undefined);},30_000);cleanupTimer.unref();app.addHook('onClose',async()=>clearInterval(cleanupTimer));}
  return {blocked,blockedPeerIds,accepted,resolveUser,sendEncrypted,mutateMessage,markMessageRead,cleanupExpired,tracked,ensureAvailable};
 }
